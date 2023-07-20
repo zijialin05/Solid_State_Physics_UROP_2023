@@ -217,10 +217,14 @@ W1U:=W1;	W2U:=W1U;
 W4U:=W1U;	W3U:=W1U;
 
 //MAGNETISATION STATE 0=out, 1=in, vortex(circ,pol): 2=(1,1), 3=(-1,1), 4=(1,-1), 5=(-1,-1), 7=random 
-M1:=2;  M2:=0; //todo: Currently the initial magnetization state of the upper layer is set to vortex with (circ=1,pol=1)
-M4:=0;  M3:=0;			
+//M1:=2;  M2:=0; //todo: Currently the initial magnetization state of the upper layer is set to vortex with (circ=1,pol=1)
+//M4:=0;  M3:=0;			
 
-M1U:=0;  M2U:=0; //todo: Currently, initial state of bottom layer is set to "out", maybe means positive-x macrospin.
+
+//M1U:=0;  M2U:=0; //todo: Currently, initial state of bottom layer is set to "out", maybe means positive-x macrospin.
+//M4U:=2;  M3U:=0; //todo: Not sure why M4U is set to 2 but I don't think it matters in our options.
+//modified
+M1U:=3;  M2U:=0; //todo: Currently, initial state of bottom layer is set to "out", maybe means positive-x macrospin.
 M4U:=2;  M3U:=0; //todo: Not sure why M4U is set to 2 but I don't think it matters in our options.
 
 //STATE CYCLE SIM 4 OPTIONS
