@@ -25,7 +25,7 @@ regionname={'T','B',};
 map='hot';
 fonty=14;
 fmin=0;fmax=5;fres=1;
-Xmin=-50;Xmax=50;Xres=10;
+Xmin=0;Xmax=60;Xres=10;
 cmin=0;cmax=1;c_log=1;
 
 % PLOT ALL FIELDS

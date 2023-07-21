@@ -21,8 +21,8 @@ save_png=0;
 
 comp_sep=0;
 
-fmin=2;fmax=15;fres=1;
-Xmin=-20;Xmax=50;Xres=10;
+fmin=0;fmax=14;fres=1;
+Xmin=0;Xmax=60;Xres=10;
 %Xmin=0;Xmax=700;Xres=40;
 cmin=0;cmax=1;
 set(0,'defaultfigurecolor',[1 1 1])
