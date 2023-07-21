@@ -21,7 +21,7 @@ save_png=0;
 
 comp_sep=0;
 
-fmin=0;fmax=14;fres=1;
+fmin=0;fmax=15;fres=1;
 Xmin=0;Xmax=60;Xres=10;
 %Xmin=0;Xmax=700;Xres=40;
 cmin=0;cmax=1;

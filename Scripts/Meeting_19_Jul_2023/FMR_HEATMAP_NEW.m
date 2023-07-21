@@ -24,7 +24,7 @@ regionname={'T','B',};
 %%HEATMAP
 map='hot';
 fonty=14;
-fmin=0;fmax=5;fres=1;
+fmin=0;fmax=14;fres=1;
 Xmin=0;Xmax=60;Xres=10;
 cmin=0;cmax=1;c_log=1;
 
