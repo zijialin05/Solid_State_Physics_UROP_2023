@@ -121,7 +121,7 @@ Msati_UL:=800; damping_UL:=0.005;ex_stiff_UL:=13  	//kA/m, ,pJ   permalloy
 //DC field in oe
 DC_field:=1;Hmin:=0;Hmax:=600;Hstep:=10.0;H:=0;loops:=1;loopres:=5 
 //setting Hmax and Hstep to -ve will reverse the field direction, for hysteresis the direction is set so 
-H_theta:=0.0*deg;H_phi:=0.0*deg;					
+H_theta:=180.0*deg;H_phi:=0.0*deg;					
 //this will just be the min max fields choose the in plane (theta) and out of plane (phi) angles for the 
 H_theta2:=360.0*deg;H_phi2:=0.0*deg;ph_res:=3*deg;	
 //applied field direction when doing polar hysterisis simualtion H_theta and H_theta2 etc. select angle range
