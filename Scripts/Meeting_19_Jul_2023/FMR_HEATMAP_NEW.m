@@ -32,7 +32,7 @@ cmin=0;cmax=1;c_log=1;
 plot_ALLFIELDS=1;
 log_col_plot=1;
 
-plot_SELECTFIELDS = 1;
+plot_SELECTFIELDS = 0;
 
 set(0,'defaultfigurecolor',[1 1 1])
 
