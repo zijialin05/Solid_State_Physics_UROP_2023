@@ -8,7 +8,7 @@ Created on Fri Jul 14 20:04:00 2023
 import imageio as io
 from skimage.transform import resize
 
-fig_folder_name = 'TRI_ISLAND_P.out/'
+fig_folder_name = '0.0005_damping.out/'
 prefix_l = ['B_D', 'B_M', 'T_D', 'T_M']
 
 for prefix in prefix_l:
