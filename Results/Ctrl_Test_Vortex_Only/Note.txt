@@ -1,0 +1,10 @@
+This is the simulation for the control test with the vortex layer only
+
+The approach I used was to delete the under layer by setting its thickness to 0,
+change the thickness of the upper layer to 30 nm, and make it a vortex (ACW)
+
+The reason for this is that whenever I tried to delete the upper layer, the program raised an error
+
+I hope this works the same.
+
+Please LMK if there is a problem

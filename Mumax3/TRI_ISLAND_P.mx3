@@ -136,7 +136,7 @@ rand_m:=0
 
 //EXCITATION
 f := 15.0e9	 //frequency
-Amp := 0.005	 //amplitude
+Amp := 0.01	 //amplitude
 tstep := 1/(2*f)	//timestep automatically calculated from Nyquist frequency
 tot := tstep*1000
 tsim := trunc(tot / tstep)
@@ -192,14 +192,14 @@ W4:=W1;	W3:=W4;
 //VARIATION
 Lvar:=0e-9;Wvar:=0e-9		//variation normally distributed around selected param
 ii:=1; jj:=1     			 //number of ASI along x and y
-thickness:=20.0e-9;
+thickness:=30.0e-9;
 ////////UNDER LAYER ////////
-t_UL:=30.0e-9; g_UL:=30e-9//thickness of bottom layer and gap
+t_UL:=0.0e-9; g_UL:=0e-9//thickness of bottom layer and gap
 l_UL:=inf;w_UL:=inf
 xo_U:=0;yo_U:=0*cy
 ex_scale:=1   //can scale exhcnage between layers instead of a physicsal gap
 ASI_underlayer:=1
-xLoff:=40e-9;yLoff:=40e-9;  //this offsets the top and bottom layers relative to each other //todo: Offset
+xLoff:=0e-9;yLoff:=0e-9;  //this offsets the top and bottom layers relative to each other //todo: Offset
 ////////ASI UNDERLAYER/////////
 //LENGTH
 L1U:=L1;	L2U:=L1U
@@ -209,10 +209,10 @@ W1U:=W1;	W2U:=W1U;
 W4U:=W1U;	W3U:=W1U;
 
 //MAGNETISATION STATE 0=out 1=in vortex (circ,pol): 2=(1,1) 3=(-1,1) 4=(1,-1) 5=(-1,-1) 7=random 
-M1:=0;  M2:=2;				//todo: Changed to -x macrospin for top layer.
+M1:=2;  M2:=2;				//todo: Changed to -x macrospin for top layer.
 M4:=2;  M3:=2;			
 
-M1U:=3;  M2U:=2;		//todo: Changed to CW vortex for bottom layer.
+M1U:=2;  M2U:=2;		//todo: Changed to ACW vortex for bottom layer.
 M4U:=2;  M3U:=2;			
 
 //STATE CYCLE SIM 4 OPTIONS
