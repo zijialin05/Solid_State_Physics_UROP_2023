@@ -5,6 +5,6 @@ change the thickness of the upper layer to 30 nm, and make it a vortex (ACW)
 
 The reason for this is that whenever I tried to delete the upper layer, the program raised an error
 
-I hope this works the same.
+I hope this works the same, but the result seems very wrong.
 
 Please LMK if there is a problem
