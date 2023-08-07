@@ -110,7 +110,7 @@ Msati:=800; damping:=0.005;ex_stiff:=13  	//kA/m, ,pJ   permalloy
 
 //uncomment the material paramaters you want for bottom layer
 //Msati_UL:=185; damping_UL:=0.0003;ex_stiff_UL:=3.1  	//kA/m, ,pJ   YIG
-Msati_UL:=800; damping_UL:=0.005;ex_stiff_UL:=13  	//kA/m, ,pJ   permalloy
+Msati_UL:=0; damping_UL:=0.005;ex_stiff_UL:=13  	//kA/m, ,pJ   permalloy
 //Msati_UL:=1150; damping_UL:=0.005;ex_stiff_UL:=16  	//kA/m, ,pJ	  CoFeB
 
 //     db    88""Yb 88""Yb 88     88 888888 8888b.      888888 88 888888 88     8888b.  .dP"Y8 
@@ -194,12 +194,12 @@ Lvar:=0e-9;Wvar:=0e-9		//variation normally distributed around selected param
 ii:=1; jj:=1     			 //number of ASI along x and y
 thickness:=30.0e-9;
 ////////UNDER LAYER ////////
-t_UL:=0.0e-9; g_UL:=0e-9//thickness of bottom layer and gap
+t_UL:=0.0e-9; g_UL:=30e-9//thickness of bottom layer and gap
 l_UL:=inf;w_UL:=inf
 xo_U:=0;yo_U:=0*cy
 ex_scale:=1   //can scale exhcnage between layers instead of a physicsal gap
 ASI_underlayer:=1
-xLoff:=0e-9;yLoff:=0e-9;  //this offsets the top and bottom layers relative to each other //todo: Offset
+xLoff:=40e-9;yLoff:=40e-9;  //this offsets the top and bottom layers relative to each other //todo: Offset
 ////////ASI UNDERLAYER/////////
 //LENGTH
 L1U:=L1;	L2U:=L1U
