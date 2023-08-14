@@ -110,7 +110,7 @@ Msati:=800; damping:=0.005;ex_stiff:=13  	//kA/m, ,pJ   permalloy
 
 //uncomment the material paramaters you want for bottom layer
 //Msati_UL:=185; damping_UL:=0.0003;ex_stiff_UL:=3.1  	//kA/m, ,pJ   YIG
-Msati_UL:=0; damping_UL:=0.005;ex_stiff_UL:=13  	//kA/m, ,pJ   permalloy
+Msati_UL:=800; damping_UL:=0.005;ex_stiff_UL:=13  	//kA/m, ,pJ   permalloy
 //Msati_UL:=1150; damping_UL:=0.005;ex_stiff_UL:=16  	//kA/m, ,pJ	  CoFeB
 
 //     db    88""Yb 88""Yb 88     88 888888 8888b.      888888 88 888888 88     8888b.  .dP"Y8 
@@ -192,9 +192,9 @@ W4:=W1;	W3:=W4;
 //VARIATION
 Lvar:=0e-9;Wvar:=0e-9		//variation normally distributed around selected param
 ii:=1; jj:=1     			 //number of ASI along x and y
-thickness:=30.0e-9;
+thickness:=20.0e-9;
 ////////UNDER LAYER ////////
-t_UL:=0.0e-9; g_UL:=30e-9//thickness of bottom layer and gap
+t_UL:=30.0e-9; g_UL:=30e-9//thickness of bottom layer and gap
 l_UL:=inf;w_UL:=inf
 xo_U:=0;yo_U:=0*cy
 ex_scale:=1   //can scale exhcnage between layers instead of a physicsal gap
@@ -209,10 +209,10 @@ W1U:=W1;	W2U:=W1U;
 W4U:=W1U;	W3U:=W1U;
 
 //MAGNETISATION STATE 0=out 1=in vortex (circ,pol): 2=(1,1) 3=(-1,1) 4=(1,-1) 5=(-1,-1) 7=random 
-M1:=2;  M2:=2;				//todo: Changed to -x macrospin for top layer.
+M1:=0;  M2:=2;				//todo: Changed to -x macrospin for top layer.
 M4:=2;  M3:=2;			
 
-M1U:=2;  M2U:=2;		//todo: Changed to ACW vortex for bottom layer.
+M1U:=3;  M2U:=2;		//todo: Changed to CW vortex for bottom layer.
 M4U:=2;  M3U:=2;			
 
 //STATE CYCLE SIM 4 OPTIONS
@@ -2304,6 +2304,7 @@ print("FMR")
 	
 //FIELDLOOP
 for H=Hmin; H<=Hmax; H=H+Hstep{
+if H==200{
 
 print(param)
 t=0
@@ -2438,45 +2439,10 @@ if save_ovf==0{
 //RUN FMR
 if custom==1{
 print("CUSTOM FILENAMES")
-	for i :=0; i<= tsim; i ++{
-		if H<0&&save_ovf==1{		
-		filename:=sprintf("n%03.0foe_%03.0f_M%04d",abs(H),param,i)
-		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
-		if H>=0&&save_ovf==1{		
-		filename:=sprintf("p%03.0foe_%03.0f_M%04d",abs(H),param,i)
-		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
-		
-		if H<0&&save_demag==1{		
-		filename:=sprintf("n%03.0foe_%03.0f_D%04d",abs(H),param,i)
-		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
-		if H>=0&&save_demag==1{		
-		filename:=sprintf("p%03.0foe_%03.0f_D%04d",abs(H),param,i)
-		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
-		
-			loading:=(i/tsim)*100
-			if floor(loading)*1-loading*1==0{
-			load:=sprintf("%03.0foe_%03.0fnm_%03.2f %%", H*1.0,param,loading)
-			print(load)
-			}
-			tablesave()
-			//print(t)
-			run(tstep)			
-	}
 	
 }
 
-//RUN FMR
-if custom==0{
-print("AUTO FILENAMES")
-			autosave(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
-			autosave(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
-			tableAutosave(tstep)
-			run(tot)			
-	}	
+
 
 
 }
@@ -2489,51 +2455,19 @@ print("SAVING OVFS")
 //RUN FMR
 if custom==1{
 print("CUSTOM FILENAMES")
-	for i :=0; i<= tsim; i ++{
-		if H<0&&save_ovf==1{		
-		filename:=sprintf("n%03.0foe_%03.0f_M%04d",abs(H),param,i)
-		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
-		if H>=0&&save_ovf==1{		
-		filename:=sprintf("p%03.0foe_%03.0f_M%04d",abs(H),param,i)
-		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
-		
-		if H<0&&save_demag==1{		
-		filename:=sprintf("n%03.0foe_%03.0f_D%04d",abs(H),param,i)
-		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
-		if H>=0&&save_demag==1{		
-		filename:=sprintf("p%03.0foe_%03.0f_D%04d",abs(H),param,i)
-		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
-		
-			loading:=(i/tsim)*100
-			if floor(loading)*1-loading*1==0{
-			load:=sprintf("%03.0foe_%03.0fnm_%03.2f %%", H*1.0,param,loading)
-			print(load)
-			}
-			tablesave()
-			//print(t)
-			run(tstep)			
-	}
 	
 }
 
-//RUN FMR
-if custom==0{
-print("AUTO FILENAMES")
-			autosave(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
-			autosave(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
-			tableAutosave(tstep)
-			run(tot)			
-	}	
-
 
 }
 }
+
+B_M_20mT := Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+autosnapshot(B_M_20mT, 1e-10)
+run(2e-8)
 
 fcount=fcount+1
+}
 }
 }
 
