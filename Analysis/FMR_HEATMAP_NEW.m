@@ -162,6 +162,7 @@ saveas(gcf,(name))
 Lmap=jet(H_l)
 fig = figure;
 fig.Position = [100 100 720 1080];
+
 for i=21:21
     if log_col_plot==1;P=log(Pnorm(:,i))+i;end
     if log_col_plot==0;P=(Pnorm(:,i))+i;end
