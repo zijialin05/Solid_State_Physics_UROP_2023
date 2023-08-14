@@ -31,6 +31,8 @@ Dbot := crop(m, 0, 1, 0, 1, 0, 1)
 demagOFF := 0
 OutputFormat = OVF1_TEXT
 param := 50.0
+totalTime := 2e-9
+stepTime := 1e-11
 cx := 5e-9
 cy := 5e-9
 cz := 10.0e-9
@@ -2266,119 +2268,124 @@ if 1 == 1 {
 			if H == 200 {
 				print(param)
 				t = 0
-				if loadGS == 1 {
-					print("LOADING GS")
-					loadGS_H := ("")
-					if H >= 0 {
-						loadGS_H = sprintf("%sp%04doe.ovf", loadGS_dir, H)
-						print(loadGS_H)
+				for t <= totalTime {
+					if loadGS == 1 {
+						print("LOADING GS")
+						loadGS_H := ("")
+						if H >= 0 {
+							loadGS_H = sprintf("%sp%04doe.ovf", loadGS_dir, H)
+							print(loadGS_H)
+						}
+						if H < 0 {
+							loadGS_H = sprintf("%sn%04doe.ovf", loadGS_dir, H)
+							print(loadGS_H)
+						}
+					}
+					xbias := (H / 10000) * (cos(H_theta) * cos(H_phi))
+					ybias := (H / 10000) * (sin(m_theta) * cos(H_phi))
+					zbias := (H / 10000) * sin(H_phi)
+					B_ext = vector(xbias, ybias, zbias)
+					if demagOFF == 0 {
+						relax()
+					}
+					if homo == 1 {
+						B_ext = vector(xbias-Amp*AC_x*sinc(2*pi*f*(t-pause)), ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)), zbias*sin(H_phi)+Amp*AC_z*sinc(2*pi*f*(t-pause)))
+					}
+					if antenni == 1 {
+						B_ext.setregion(antenni, vector(xbias-Amp*AC_x*sinc(2*pi*f*(t-pause)), ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)), zbias*sin(H_phi)+Amp*AC_z*sinc(2*pi*f*(t-pause))))
+					}
+					if antenna == 1 {
+						B_ext.setregion(11, vector(xbias+Amp*AC_x*sinc(2*pi*f*(t-pause)), ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)), zbias+Amp*AC_z*sinc(2*pi*f*(t-pause))))
+					}
+					if homo == 2 {
+						B_ext = vector(xbias-Amp*AC_x*sin(2*pi*f*(t-pause)), ybias-Amp*AC_y*sin(2*pi*f*(t-pause)), zbias*sin(H_phi)+Amp*AC_z*sin(2*pi*f*(t-pause)))
+					}
+					mask := newVectorMask(Nx, Ny, 1)
+					for i := 0; i < Nx; i++ {
+						for j := 0; j < Ny; j++ {
+							r := index2coord(i, j, 0)
+							x := r.X()
+							y := r.Y()
+							mask.setVector(i, j, 0, vector(0, 0, sinc(x/(kx_w*cx))*sinc(ky_w*cy)))
+						}
+					}
+					if sincpulse == 1 {
+						B_ext.add(mask, Amp*sinc(2*pi*f*(t-pause)))
 					}
 					if H < 0 {
-						loadGS_H = sprintf("%sn%04doe.ovf", loadGS_dir, H)
-						print(loadGS_H)
+						if t_UL == 0 {
+							filename := sprintf("%03d_n%04.0foe.jpg", fcount, abs(H))
+							snapshotas(magT, filename)
+						}
+						if t_UL > 0 {
+							filename := sprintf("T_M_%03d_n%04.0foe_%02.0fps.jpg", fcount, abs(H), t*1e12)
+							snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz), filename)
+							filename = sprintf("T_D_%03d_n%04.0foe_%02.0fps.jpg", fcount, abs(H), t*1e12)
+							snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz), filename)
+							filename = sprintf("B_M_%03d_n%04.0foe_%02.0fps.jpg", fcount, abs(H), t*1e12)
+							snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)), filename)
+							filename = sprintf("B_D_%03d_n%04.0foe_%02.0fps.jpg", fcount, abs(H), t*1e12)
+							snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)), filename)
+						}
+						if saveGS == 1 {
+							filename := sprintf("M_n%04.0foe.ovf", abs(H))
+							saveas(magT, filename)
+							filename = sprintf("D_n%04.0foe.ovf", abs(H))
+							saveas(B_demag, filename)
+						}
 					}
-				}
-				xbias := (H / 10000) * (cos(H_theta) * cos(H_phi))
-				ybias := (H / 10000) * (sin(m_theta) * cos(H_phi))
-				zbias := (H / 10000) * sin(H_phi)
-				B_ext = vector(xbias, ybias, zbias)
-				if demagOFF == 0 {
-					relax()
-				}
-				if H < 0 {
-					if t_UL == 0 {
-						filename := sprintf("%03d_n%04.0foe.jpg", fcount, abs(H))
-						snapshotas(magT, filename)
+					if H >= 0 {
+						if t_UL == 0 {
+							filename := sprintf("%03d_p%04.0foe.jpg", fcount, abs(H))
+							snapshotas(magT, filename)
+						}
+						if t_UL > 0 {
+							filename := sprintf("T_M_%03d_n%04.0foe_%02.0fps.jpg", fcount, abs(H), t*1e12)
+							snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz), filename)
+							filename = sprintf("T_D_%03d_n%04.0foe_%02.0fps.jpg", fcount, abs(H), t*1e12)
+							snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz), filename)
+							filename = sprintf("B_M_%03d_n%04.0foe_%02.0fps.jpg", fcount, abs(H), t*1e12)
+							snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)), filename)
+							filename = sprintf("B_D_%03d_n%04.0foe_%02.0fps.jpg", fcount, abs(H), t*1e12)
+							snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)), filename)
+						}
+						if saveGS == 1 {
+							filename := sprintf("M_p%04.0foe.ovf", abs(H))
+							saveas(magT, filename)
+							filename = sprintf("D_p%04.0foe.ovf", abs(H))
+							saveas(B_demag, filename)
+						}
 					}
-					if t_UL > 0 {
-						filename := sprintf("T_M_%03d_n%04.0foe.jpg", fcount, abs(H))
-						snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz), filename)
-						filename = sprintf("T_D_%03d_n%04.0foe.jpg", fcount, abs(H))
-						snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz), filename)
-						filename = sprintf("B_M_%03d_n%04.0foe.jpg", fcount, abs(H))
-						snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)), filename)
-						filename = sprintf("B_D_%03d_n%04.0foe.jpg", fcount, abs(H))
-						snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)), filename)
+					if fcount == 0 {
+						snapshot(regions)
+						OutputFormat = OVF2_BINARY
+						region_name := sprintf("regions_%dby%dby%d", Nx, Ny, Nz)
+						saveas(regions, region_name)
+						OutputFormat = OVF1_TEXT
 					}
-					if saveGS == 1 {
-						filename := sprintf("M_n%04.0foe.ovf", abs(H))
-						saveas(magT, filename)
-						filename = sprintf("D_n%04.0foe.ovf", abs(H))
-						saveas(B_demag, filename)
-					}
-				}
-				if H >= 0 {
-					if t_UL == 0 {
-						filename := sprintf("%03d_p%04.0foe.jpg", fcount, abs(H))
-						snapshotas(magT, filename)
-					}
-					if t_UL > 0 {
-						filename := sprintf("T_M_%03d_p%04.0foe.jpg", fcount, abs(H))
-						snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz), filename)
-						filename = sprintf("T_D_%03d_p%04.0foe.jpg", fcount, abs(H))
-						snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz), filename)
-						filename = sprintf("B_M_%03d_p%04.0foe.jpg", fcount, abs(H))
-						snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)), filename)
-						filename = sprintf("B_D_%03d_p%04.0foe.jpg", fcount, abs(H))
-						snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)), filename)
-					}
-					if saveGS == 1 {
-						filename := sprintf("M_p%04.0foe.ovf", abs(H))
-						saveas(magT, filename)
-						filename = sprintf("D_p%04.0foe.ovf", abs(H))
-						saveas(B_demag, filename)
-					}
-				}
-				if homo == 1 {
-					B_ext = vector(xbias-Amp*AC_x*sinc(2*pi*f*(t-pause)), ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)), zbias*sin(H_phi)+Amp*AC_z*sinc(2*pi*f*(t-pause)))
-				}
-				if antenni == 1 {
-					B_ext.setregion(antenni, vector(xbias-Amp*AC_x*sinc(2*pi*f*(t-pause)), ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)), zbias*sin(H_phi)+Amp*AC_z*sinc(2*pi*f*(t-pause))))
-				}
-				if antenna == 1 {
-					B_ext.setregion(11, vector(xbias+Amp*AC_x*sinc(2*pi*f*(t-pause)), ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)), zbias+Amp*AC_z*sinc(2*pi*f*(t-pause))))
-				}
-				if homo == 2 {
-					B_ext = vector(xbias-Amp*AC_x*sin(2*pi*f*(t-pause)), ybias-Amp*AC_y*sin(2*pi*f*(t-pause)), zbias*sin(H_phi)+Amp*AC_z*sin(2*pi*f*(t-pause)))
-				}
-				mask := newVectorMask(Nx, Ny, 1)
-				for i := 0; i < Nx; i++ {
-					for j := 0; j < Ny; j++ {
-						r := index2coord(i, j, 0)
-						x := r.X()
-						y := r.Y()
-						mask.setVector(i, j, 0, vector(0, 0, sinc(x/(kx_w*cx))*sinc(ky_w*cy)))
-					}
-				}
-				if sincpulse == 1 {
-					B_ext.add(mask, Amp*sinc(2*pi*f*(t-pause)))
-				}
-				if fcount == 0 {
-					snapshot(regions)
-					OutputFormat = OVF2_BINARY
-					region_name := sprintf("regions_%dby%dby%d", Nx, Ny, Nz)
-					saveas(regions, region_name)
-					OutputFormat = OVF1_TEXT
-				}
-				if save_ovf == 0 {
-					if custom == 1 {
-						print("CUSTOM FILENAMES")
-					}
-				}
-				if save_ovf == 1 {
-					print("SKIPPING FMR", (H), "oe")
-					if H == HS1 || H == HS2 || H == HS3 || H == HS4 || SAVEALL == 1 {
-						print("SAVING OVFS")
+					if save_ovf == 0 {
 						if custom == 1 {
 							print("CUSTOM FILENAMES")
 						}
+						if custom == 0 {
+							print("AUTO FILENAMES")
+						}
 					}
+					if save_ovf == 1 {
+						print("SKIPPING FMR", (H), "oe")
+						if H == HS1 || H == HS2 || H == HS3 || H == HS4 || SAVEALL == 1 {
+							print("SAVING OVFS")
+							if custom == 1 {
+								print("CUSTOM FILENAMES")
+							}
+							if custom == 0 {
+							}
+						}
+					}
+					run(tstep)
 				}
-				B_M_20mT := Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
-				autosnapshot(B_M_20mT, 1e-10)
-				run(2e-8)
-				fcount = fcount + 1
 			}
+			fcount = fcount + 1
 		}
 	}
 	if SIM == 2 {
@@ -5055,6 +5062,65 @@ if 1 == 1 {
 }
 //FMR
 //0
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
+//CUSTOM FILENAMES
 //CUSTOM FILENAMES
 //********************************************************************//
 //Please cite the following references, relevant for your simulation. //
