@@ -136,12 +136,12 @@ rand_m:=0
 
 //EXCITATION
 f := 15.0e9	 //frequency
-Amp := 0.01	 //amplitude
+Amp := 0.01*1.5	 //amplitude
 tstep := 1/(2*f)	//timestep automatically calculated from Nyquist frequency
-tot := tstep*100
+tot := tstep*1000
 tsim := trunc(tot / tstep)
 pause := tot/4
-AC_x:=1.5;AC_y:=0;AC_z:=0;//direction of AC field
+AC_x:=1;AC_y:=0;AC_z:=0;//direction of AC field
 //ANTENNA TYPE
 homo:=1;antenna:=0;antenni:=0;a_wg:=100.0e-6;w_wg_x:=8*cx;w_wg_y:=inf;
 //SINC IN SPACE	
@@ -2303,7 +2303,7 @@ if SIM==1{
 print("FMR")	
 	
 //FIELDLOOP
-for H=Hmin; H<=400; H=H+100{
+for H=Hmin; H<=Hmax; H=H+Hstep{
 
 print(param)
 t=0
@@ -2387,6 +2387,13 @@ if t_UL>0{
 
 
 
+
+
+
+
+
+
+
 //CHOOSE AC FIELD TYPE
 if homo==1{
 B_ext=vector(xbias-Amp*AC_x*sinc(2*pi*f*(t-pause)),ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)),zbias*sin(H_phi)+Amp*AC_z*sinc(2*pi*f*(t-pause)))
@@ -2432,14 +2439,23 @@ if save_ovf==0{
 if custom==1{
 print("CUSTOM FILENAMES")
 	for i :=0; i<= tsim; i ++{
-		filename:=sprintf("T_M_%03d_p%04.0foe_%t.jpg",fcount,abs(H))
-		snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)
-		filename=sprintf("T_D_%03d_p%04.0foe_%t.jpg",fcount,abs(H))
-		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz),filename)
-		filename=sprintf("B_M_%03d_p%04.0foe_%t.jpg",fcount,abs(H))
-		snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
-		filename=sprintf("B_D_%03d_p%04.0foe_%t.jpg",fcount,abs(H))
-		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
+		if H<0&&save_ovf==1{		
+		filename:=sprintf("n%03.0foe_%03.0f_M%04d",abs(H),param,i)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		}
+		if H>=0&&save_ovf==1{		
+		filename:=sprintf("p%03.0foe_%03.0f_M%04d",abs(H),param,i)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		}
+		
+		if H<0&&save_demag==1{		
+		filename:=sprintf("n%03.0foe_%03.0f_D%04d",abs(H),param,i)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		}
+		if H>=0&&save_demag==1{		
+		filename:=sprintf("p%03.0foe_%03.0f_D%04d",abs(H),param,i)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		}
 		
 			loading:=(i/tsim)*100
 			if floor(loading)*1-loading*1==0{
