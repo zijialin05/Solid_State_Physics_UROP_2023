@@ -20,6 +20,12 @@ OutputFormat = OVF1_TEXT  // this format allows for matlab reading
 param:=50.0		//This is added to the table so if changing some param between SIMS use this so it can be read from the table.txt file
 //param currently set to xLoffset 
 
+// Set the total simulation time
+totalTime := 2e-9
+
+// Set the step time
+stepTime := 1e-11
+
 //	 dP""b8  dP"Yb  8b    d8 8b    d8  dP"Yb  88b 88     dP"Yb  88""Yb 888888 88  dP"Yb  88b 88 .dP"Y8 
 //	dP   `" dP   Yb 88b  d88 88b  d88 dP   Yb 88Yb88    dP   Yb 88__dP   88   88 dP   Yb 88Yb88 `Ybo." 
 //	Yb      Yb   dP 88YbdP88 88YbdP88 Yb   dP 88 Y88    Yb   dP 88"""    88   88 Yb   dP 88 Y88 o.`Y8b 
@@ -110,7 +116,7 @@ Msati:=800; damping:=0.005;ex_stiff:=13  	//kA/m, ,pJ   permalloy
 
 //uncomment the material paramaters you want for bottom layer
 //Msati_UL:=185; damping_UL:=0.0003;ex_stiff_UL:=3.1  	//kA/m, ,pJ   YIG
-Msati_UL:=0; damping_UL:=0.005;ex_stiff_UL:=13  	//kA/m, ,pJ   permalloy
+Msati_UL:=800; damping_UL:=0.005;ex_stiff_UL:=13  	//kA/m, ,pJ   permalloy
 //Msati_UL:=1150; damping_UL:=0.005;ex_stiff_UL:=16  	//kA/m, ,pJ	  CoFeB
 
 //     db    88""Yb 88""Yb 88     88 888888 8888b.      888888 88 888888 88     8888b.  .dP"Y8 
@@ -192,9 +198,9 @@ W4:=W1;	W3:=W4;
 //VARIATION
 Lvar:=0e-9;Wvar:=0e-9		//variation normally distributed around selected param
 ii:=1; jj:=1     			 //number of ASI along x and y
-thickness:=30.0e-9;
+thickness:=20.0e-9;
 ////////UNDER LAYER ////////
-t_UL:=0.0e-9; g_UL:=30e-9//thickness of bottom layer and gap
+t_UL:=30.0e-9; g_UL:=30e-9//thickness of bottom layer and gap
 l_UL:=inf;w_UL:=inf
 xo_U:=0;yo_U:=0*cy
 ex_scale:=1   //can scale exhcnage between layers instead of a physicsal gap
@@ -209,10 +215,10 @@ W1U:=W1;	W2U:=W1U;
 W4U:=W1U;	W3U:=W1U;
 
 //MAGNETISATION STATE 0=out 1=in vortex (circ,pol): 2=(1,1) 3=(-1,1) 4=(1,-1) 5=(-1,-1) 7=random 
-M1:=2;  M2:=2;				//todo: Changed to -x macrospin for top layer.
+M1:=0;  M2:=2;				//todo: Changed to -x macrospin for top layer.
 M4:=2;  M3:=2;			
 
-M1U:=2;  M2U:=2;		//todo: Changed to ACW vortex for bottom layer.
+M1U:=3;  M2U:=2;		//todo: Changed to CW vortex for bottom layer.
 M4U:=2;  M3U:=2;			
 
 //STATE CYCLE SIM 4 OPTIONS
@@ -2291,6 +2297,8 @@ if antenna>0{
 //  o.`Y8b 88 88YbdP88 Y8   8P 88  .o  dP__Yb    88   88 Yb   dP 88 Y88 o.`Y8b 
 //  8bodP' 88 88 YY 88 `YbodP' 88ood8 dP""""Yb   88   88  YbodP  88  Y8 8bodP' 
 
+
+
 if 1==1{
 
 //  888888 8b    d8 88""Yb        dP     .dP"Y8 88""Yb 88 88b 88 Yb        dP    db    Yb    dP 888888 .dP"Y8 
@@ -2304,9 +2312,15 @@ print("FMR")
 	
 //FIELDLOOP
 for H=Hmin; H<=Hmax; H=H+Hstep{
+if H==200{
+
 
 print(param)
 t=0
+
+// Loop until we've reached the total simulation time
+for t <= totalTime {
+
 //This will restart the field loop
 //B_ext=vector((kmin/10000)*xbias,(kmin/1000)*ybias,0)
 //relax()
@@ -2314,6 +2328,7 @@ t=0
 //B_ext=vector((B/10000)*xbias,(B/1000)*ybias,0)
 //minimize()
 //
+
 if loadGS==1{
 	print("LOADING GS")
 	loadGS_H:=("")
@@ -2334,6 +2349,36 @@ if demagOFF==0{
 relax()
 }
 
+//CHOOSE AC FIELD TYPE
+if homo==1{
+	B_ext=vector(xbias-Amp*AC_x*sinc(2*pi*f*(t-pause)),ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)),zbias*sin(H_phi)+Amp*AC_z*sinc(2*pi*f*(t-pause)))
+	}
+	if antenni==1{
+		
+	B_ext.setregion(antenni,vector(xbias-Amp*AC_x*sinc(2*pi*f*(t-pause)),ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)),zbias*sin(H_phi)+Amp*AC_z*sinc(2*pi*f*(t-pause))))
+	}
+	if antenna==1{
+	B_ext.setregion(11,vector(xbias+Amp*AC_x*sinc(2*pi*f*(t-pause)),ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)),zbias+Amp*AC_z*sinc(2*pi*f*(t-pause))))
+	}
+	if homo==2{
+	B_ext=vector(xbias-Amp*AC_x*sin(2*pi*f*(t-pause)),ybias-Amp*AC_y*sin(2*pi*f*(t-pause)),zbias*sin(H_phi)+Amp*AC_z*sin(2*pi*f*(t-pause)))
+	}
+	
+	//SINC MASK
+	mask := newVectorMask(Nx, Ny, 1)
+	for i:=0; i<Nx; i++{
+		for j:=0; j<Ny; j++{       
+			   r := index2coord(i, j, 0)
+			   x := r.X()
+				y := r.Y()                       
+				mask.setVector(i,j,0, vector(0,0,sinc(x/(kx_w*cx))*sinc(ky_w*cy) )) // X component is 0 component.
+		}             
+	}
+	
+	if sincpulse==1{
+	B_ext.add(mask, Amp*sinc(2*pi*f*(t-pause)))
+	}
+
 if H<0{
 	if t_UL==0{
 filename:=sprintf("%03d_n%04.0foe.jpg",fcount,abs(H))
@@ -2341,13 +2386,13 @@ snapshotas(magT,filename)
 
 	}
 if t_UL>0{
-			filename:=sprintf("T_M_%03d_n%04.0foe.jpg",fcount,abs(H))
+			filename:=sprintf("T_M_%03d_n%04.0foe_%02.0fps.jpg",fcount,abs(H), t*1e12)
 			snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)
-			filename=sprintf("T_D_%03d_n%04.0foe.jpg",fcount,abs(H))
+			filename=sprintf("T_D_%03d_n%04.0foe_%02.0fps.jpg",fcount,abs(H), t*1e12)
 			snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz),filename)
-			filename=sprintf("B_M_%03d_n%04.0foe.jpg",fcount,abs(H))
+			filename=sprintf("B_M_%03d_n%04.0foe_%02.0fps.jpg",fcount,abs(H), t*1e12)
 			snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
-			filename=sprintf("B_D_%03d_n%04.0foe.jpg",fcount,abs(H))
+			filename=sprintf("B_D_%03d_n%04.0foe_%02.0fps.jpg",fcount,abs(H), t*1e12)
 			snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
 
 		}
@@ -2367,13 +2412,13 @@ filename:=sprintf("%03d_p%04.0foe.jpg",fcount,abs(H))
 snapshotas(magT,filename)
 	}
 if t_UL>0{
-			filename:=sprintf("T_M_%03d_p%04.0foe.jpg",fcount,abs(H))
+			filename:=sprintf("T_M_%03d_n%04.0foe_%02.0fps.jpg",fcount,abs(H), t*1e12)
 			snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)
-			filename=sprintf("T_D_%03d_p%04.0foe.jpg",fcount,abs(H))
+			filename=sprintf("T_D_%03d_n%04.0foe_%02.0fps.jpg",fcount,abs(H), t*1e12)
 			snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz),filename)
-			filename=sprintf("B_M_%03d_p%04.0foe.jpg",fcount,abs(H))
+			filename=sprintf("B_M_%03d_n%04.0foe_%02.0fps.jpg",fcount,abs(H), t*1e12)
 			snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
-			filename=sprintf("B_D_%03d_p%04.0foe.jpg",fcount,abs(H))
+			filename=sprintf("B_D_%03d_n%04.0foe_%02.0fps.jpg",fcount,abs(H), t*1e12)
 			snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
 		}
 		
@@ -2385,43 +2430,6 @@ if t_UL>0{
 					}
 }
 
-
-
-
-
-
-
-
-
-
-//CHOOSE AC FIELD TYPE
-if homo==1{
-B_ext=vector(xbias-Amp*AC_x*sinc(2*pi*f*(t-pause)),ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)),zbias*sin(H_phi)+Amp*AC_z*sinc(2*pi*f*(t-pause)))
-}
-if antenni==1{
-B_ext.setregion(antenni,vector(xbias-Amp*AC_x*sinc(2*pi*f*(t-pause)),ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)),zbias*sin(H_phi)+Amp*AC_z*sinc(2*pi*f*(t-pause))))
-}
-if antenna==1{
-B_ext.setregion(11,vector(xbias+Amp*AC_x*sinc(2*pi*f*(t-pause)),ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)),zbias+Amp*AC_z*sinc(2*pi*f*(t-pause))))
-}
-if homo==2{
-B_ext=vector(xbias-Amp*AC_x*sin(2*pi*f*(t-pause)),ybias-Amp*AC_y*sin(2*pi*f*(t-pause)),zbias*sin(H_phi)+Amp*AC_z*sin(2*pi*f*(t-pause)))
-}
-
-//SINC MASK
-mask := newVectorMask(Nx, Ny, 1)
-for i:=0; i<Nx; i++{
-    for j:=0; j<Ny; j++{       
-           r := index2coord(i, j, 0)
-           x := r.X()
-            y := r.Y()                       
-            mask.setVector(i,j,0, vector(0,0,sinc(x/(kx_w*cx))*sinc(ky_w*cy) )) // X component is 0 component.
-	}             
-}
-
-if sincpulse==1{
-B_ext.add(mask, Amp*sinc(2*pi*f*(t-pause)))
-}
 
 if fcount==0{
 snapshot(regions)
@@ -2438,44 +2446,44 @@ if save_ovf==0{
 //RUN FMR
 if custom==1{
 print("CUSTOM FILENAMES")
-	for i :=0; i<= tsim; i ++{
-		if H<0&&save_ovf==1{		
-		filename:=sprintf("n%03.0foe_%03.0f_M%04d",abs(H),param,i)
-		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
-		if H>=0&&save_ovf==1{		
-		filename:=sprintf("p%03.0foe_%03.0f_M%04d",abs(H),param,i)
-		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
+	// for i :=0; i<= tsim; i ++{
+	// 	if H<0&&save_ovf==1{		
+	// 	filename:=sprintf("n%03.0foe_%03.0f_M%04d",abs(H),param,i)
+	// 	saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+	// 	}
+	// 	if H>=0&&save_ovf==1{		
+	// 	filename:=sprintf("p%03.0foe_%03.0f_M%04d",abs(H),param,i)
+	// 	saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+	// 	}
 		
-		if H<0&&save_demag==1{		
-		filename:=sprintf("n%03.0foe_%03.0f_D%04d",abs(H),param,i)
-		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
-		if H>=0&&save_demag==1{		
-		filename:=sprintf("p%03.0foe_%03.0f_D%04d",abs(H),param,i)
-		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
+	// 	if H<0&&save_demag==1{		
+	// 	filename:=sprintf("n%03.0foe_%03.0f_D%04d",abs(H),param,i)
+	// 	saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+	// 	}
+	// 	if H>=0&&save_demag==1{		
+	// 	filename:=sprintf("p%03.0foe_%03.0f_D%04d",abs(H),param,i)
+	// 	saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+	// 	}
 		
-			loading:=(i/tsim)*100
-			if floor(loading)*1-loading*1==0{
-			load:=sprintf("%03.0foe_%03.0fnm_%03.2f %%", H*1.0,param,loading)
-			print(load)
-			}
-			tablesave()
-			//print(t)
-			run(tstep)			
-	}
+	// 		loading:=(i/tsim)*100
+	// 		if floor(loading)*1-loading*1==0{
+	// 		load:=sprintf("%03.0foe_%03.0fnm_%03.2f %%", H*1.0,param,loading)
+	// 		print(load)
+	// 		}
+	// 		tablesave()
+	// 		//print(t)
+	// 		run(tstep)			
+	// }
 	
 }
 
 //RUN FMR
 if custom==0{
 print("AUTO FILENAMES")
-			autosave(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
-			autosave(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
-			tableAutosave(tstep)
-			run(tot)			
+			// autosave(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
+			// autosave(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
+			// tableAutosave(tstep)
+			// run(tot)			
 	}	
 
 
@@ -2489,47 +2497,50 @@ print("SAVING OVFS")
 //RUN FMR
 if custom==1{
 print("CUSTOM FILENAMES")
-	for i :=0; i<= tsim; i ++{
-		if H<0&&save_ovf==1{		
-		filename:=sprintf("n%03.0foe_%03.0f_M%04d",abs(H),param,i)
-		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
-		if H>=0&&save_ovf==1{		
-		filename:=sprintf("p%03.0foe_%03.0f_M%04d",abs(H),param,i)
-		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
+	// for i :=0; i<= tsim; i ++{
+	// 	if H<0&&save_ovf==1{		
+	// 	filename:=sprintf("n%03.0foe_%03.0f_M%04d",abs(H),param,i)
+	// 	saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+	// 	}
+	// 	if H>=0&&save_ovf==1{		
+	// 	filename:=sprintf("p%03.0foe_%03.0f_M%04d",abs(H),param,i)
+	// 	saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+	// 	}
 		
-		if H<0&&save_demag==1{		
-		filename:=sprintf("n%03.0foe_%03.0f_D%04d",abs(H),param,i)
-		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
-		if H>=0&&save_demag==1{		
-		filename:=sprintf("p%03.0foe_%03.0f_D%04d",abs(H),param,i)
-		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
-		}
+	// 	if H<0&&save_demag==1{		
+	// 	filename:=sprintf("n%03.0foe_%03.0f_D%04d",abs(H),param,i)
+	// 	saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+	// 	}
+	// 	if H>=0&&save_demag==1{		
+	// 	filename:=sprintf("p%03.0foe_%03.0f_D%04d",abs(H),param,i)
+	// 	saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+	// 	}
 		
-			loading:=(i/tsim)*100
-			if floor(loading)*1-loading*1==0{
-			load:=sprintf("%03.0foe_%03.0fnm_%03.2f %%", H*1.0,param,loading)
-			print(load)
-			}
-			tablesave()
-			//print(t)
-			run(tstep)			
-	}
+	// 		loading:=(i/tsim)*100
+	// 		if floor(loading)*1-loading*1==0{
+	// 		load:=sprintf("%03.0foe_%03.0fnm_%03.2f %%", H*1.0,param,loading)
+	// 		print(load)
+	// 		}
+	// 		tablesave()
+	// 		//print(t)
+	// 		run(tstep)			
+	// }
 	
 }
 
 //RUN FMR
 if custom==0{
-print("AUTO FILENAMES")
-			autosave(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
-			autosave(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
-			tableAutosave(tstep)
-			run(tot)			
+// print("AUTO FILENAMES")
+// 			autosave(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
+// 			autosave(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
+// 			tableAutosave(tstep)
+// 			run(tot)			
 	}	
 
 
+}
+}
+run(stepTime)
 }
 }
 

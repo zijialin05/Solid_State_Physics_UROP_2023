@@ -1,0 +1,4862 @@
+// THIS CODE WAS WRITTEN BY TROY DION troy.dion@phys.kyushu-u.ac.jp last updated 26.04.2023
+// This script is designed primarily to look at FMR, spinwaves,hysteresis (linear and polar), state finding and energy calculations
+// geomtries are focused on ASI, islands as well as multilayers and continuous geometries. 
+// options can generally be turned off with 0 and on with 1. Some options will have more choices and will be commented
+// If you have any queries or find any bugs in the code please send me an email. 
+// The code is best viewed in notepad++ set to c++ language. I have added if{} around sections so they can be collapes and expanded for
+// convenience. 
+
+//GLOBAL VARIABLES DO NOT CHANGE//
+setgridsize(1, 1, 1);setcellsize(1e-9, 1e-9, 1e-9)
+tables:=1;fcount:=0;
+Nx:=0;Ny:=0;Nz:=0;g:=0;Nxc:=0;Nyc:=0;Nzc:=0
+region_dir:=sprintf("");deg:=(pi/180)
+top:=0.0;bottom:=0.0;addL:=universe();addR:=universe()
+Mtop:=crop(m, 0, 1, 0, 1, 0, 1);Dtop:=crop(m, 0, 1, 0, 1, 0, 1);
+Mbot:=crop(m, 0, 1, 0, 1, 0, 1);Dbot:=crop(m, 0, 1, 0, 1, 0, 1);
+
+demagOFF:=0 //demag field can be turned off globally
+OutputFormat = OVF1_TEXT  // this format allows for matlab reading
+param:=50.0		//This is added to the table so if changing some param between SIMS use this so it can be read from the table.txt file
+//param currently set to xLoffset 
+
+//	 dP""b8  dP"Yb  8b    d8 8b    d8  dP"Yb  88b 88     dP"Yb  88""Yb 888888 88  dP"Yb  88b 88 .dP"Y8 
+//	dP   `" dP   Yb 88b  d88 88b  d88 dP   Yb 88Yb88    dP   Yb 88__dP   88   88 dP   Yb 88Yb88 `Ybo." 
+//	Yb      Yb   dP 88YbdP88 88YbdP88 Yb   dP 88 Y88    Yb   dP 88"""    88   88 Yb   dP 88 Y88 o.`Y8b 
+//	 YboodP  YbodP  88 YY 88 88 YY 88  YbodP  88  Y8     YbodP  88       88   88  YbodP  88  Y8 8bodP'
+
+//CELLSIZE
+cx := 5e-9; cy :=5e-9; cz :=10.0e-9
+//PBCs
+PBCs:=0;PX:=100;PY:=100;PZ:=0;
+//OUTPUT
+save_ovf:=0;save_demag:=0//saves ovf files for FME
+saveGS:=0
+//(retains same loop history but does not run in time for other ovf)
+png:=1;  // save as png?
+custom:=1	//1 custom filenames 0 for autofilnames (generally leave this as 1, custom filenames contain useful information about sim params)
+
+//  .dP"Y8 88 8b    d8 88   88 88        db    888888 88  dP"Yb  88b 88     888888 Yb  dP 88""Yb 888888 
+//  `Ybo." 88 88b  d88 88   88 88       dPYb     88   88 dP   Yb 88Yb88       88    YbdP  88__dP 88__   
+//  o.`Y8b 88 88YbdP88 Y8   8P 88  .o  dP__Yb    88   88 Yb   dP 88 Y88       88     8P   88"""  88""   
+//  8bodP' 88 88 YY 88 `YbodP' 88ood8 dP""""Yb   88   88  YbodP  88  Y8       88    dP    88     888888 
+
+SIM:=1 
+//FMR = 1, HYS = 2  PHASE = 3 ASI STATE CYCLE = 4 ISLAND STATE CYCLE = 5 Hc FINDER = 6 MAG LOOP = 7 need to make DEMAG LOOP TOO
+//EXPAND FOR DETAILED DESCRIPTION
+if 1==1{
+// 1 FMR / SPINWAVE
+// The magnetisation state is set manually and relaxed in an applied field to find the energy minima. 
+// A time-dependent sinc field pulse is applied in to mimic a broadband excitation. The (de)magnetisation 
+// is recorded at regular intervals calculated from the Nyquist frequency.
+// by selecting antenna options you can simulate propgating spin waves
+	
+// 2 HYSTERSIS
+// A simple hysterisis loop along a given direction startiung from 0 field going to max +ve then min -ve
+// The angle can be freely chosen in any direction
+// You can select many loops for training protols
+
+// 3 PHASE
+// Similar to hysteresis the sample is saturated along the opposite direction to applied field direction
+// After reaching maximum field the angle is increased. This can produce are polar plot phase diagram
+	
+// 4 ASI STATE CYCLE
+// This can be used to cycle through all possibles tates for ASI, ASI trilayer and ASI + underlayer	
+// The total energy of the system is calcualted and appended to output file names so they are easily sorted
+// Take care when selecting this option. cycling over two many states for the trilayer is easily done, better to
+// fix the state of one layer and cycle through the other.
+
+// 5 ISLAND STATE CYCLE	
+// Same as ASI state cycle but for a single island	
+
+//6 Hc FINDER
+// This is just a simpler version of the HYS loop where it starts at zero and goes to the max field
+// then it re stes the same state and applies negative field to check the Hc in both directions
+// PLAN ON INCOPORATING THIS WITH STATE CYCLE AND HAVE A STATE CHECK FUNCTION THAT KILLS THE SIM WHEN STATE CHANGES
+}
+
+//	 dP""b8 888888  dP"Yb  8b    d8 888888 88""Yb Yb  dP 
+//	dP   `" 88__   dP   Yb 88b  d88   88   88__dP  YbdP  
+//	Yb  "88 88""   Yb   dP 88YbdP88   88   88"Yb    8P   
+//	 YboodP 888888  YbodP  88 YY 88   88   88  Yb  dP    
+
+simple_geometry:=0;	//options for sinple geomtries are below
+ASI_geometry:=0;	//options below, ASI, TRILAYER, ASI+hybrid, 
+ASI_saved_geom:=0;  //for large files it is wise to save the geometry as this can take some time 
+island_geometry:=1; //options for this use the ASI island 1 dimensions for top and bottom layers
+
+if ASI_saved_geom==1{
+Nx=2716;Ny=42;Nz=3;   //when using saved geometry set the dimensions here they should be written in the saved file name
+setgridsize(Nx, Ny, Nz)
+setcellsize(cx, cy, cz)
+region_dir:=sprintf("D://HPC//ASI_underlayer//long//manual_64.out//regions_%dby%dby%d.ovf",Nx,Ny,Nz) 
+regions.Loadfile(region_dir)	//directory where you saved regions file is which tells mumax your geometry																												
+if PBCs==1{						//On windows you need to put double / for it to find the directory																			
+setPBC(PX, PY, PZ)				//(note: this uses m_full so output png look strange, use mumax3-convert -normalize option on output ovf)
+}	
+regions.Loadfile(region_dir)
+snapshot(regions)
+}
+
+//  8b    d8    db    888888 888888 88""Yb 88    db    88         88""Yb    db    88""Yb    db    8b    d8 
+//  88b  d88   dPYb     88   88__   88__dP 88   dPYb   88         88__dP   dPYb   88__dP   dPYb   88b  d88 
+//  88YbdP88  dP__Yb    88   88""   88"Yb  88  dP__Yb  88  .o     88"""   dP__Yb  88"Yb   dP__Yb  88YbdP88 
+//  88 YY 88 dP""""Yb   88   888888 88  Yb 88 dP""""Yb 88ood8     88     dP""""Yb 88  Yb dP""""Yb 88 YY 88 
+
+//uncomment the material paramaters you want for the main geometry or in the case of layers this will be the top layer
+//Msati:=185; damping:=0.0003;ex_stiff:=3.1  	//kA/m, ,pJ   YIG
+Msati:=800; damping:=0.005;ex_stiff:=13  	//kA/m, ,pJ   permalloy //todo: Made the damping lower by x10.
+//Msati:=1150; damping:=0.005;ex_stiff:=16  	//kA/m, ,pJ	  CoFeB
+
+//uncomment the material paramaters you want for bottom layer
+//Msati_UL:=185; damping_UL:=0.0003;ex_stiff_UL:=3.1  	//kA/m, ,pJ   YIG
+Msati_UL:=800; damping_UL:=0.005;ex_stiff_UL:=13  	//kA/m, ,pJ   permalloy //todo: Damping lowered.
+//Msati_UL:=1150; damping_UL:=0.005;ex_stiff_UL:=16  	//kA/m, ,pJ	  CoFeB
+
+//     db    88""Yb 88""Yb 88     88 888888 8888b.      888888 88 888888 88     8888b.  .dP"Y8 
+//    dPYb   88__dP 88__dP 88     88 88__    8I  Yb     88__   88 88__   88      8I  Yb `Ybo." 
+//   dP__Yb  88"""  88"""  88  .o 88 88""    8I  dY     88""   88 88""   88  .o  8I  dY o.`Y8b 
+//  dP""""Yb 88     88     88ood8 88 888888 8888Y"      88     88 888888 88ood8 8888Y"  8bodP'
+
+//DC field in oe
+DC_field:=1;Hmin:=0;Hmax:=600;Hstep:=100.0;H:=0;loops:=1;loopres:=5 
+//setting Hmax and Hstep to -ve will reverse the field direction, for hysteresis the direction is set so 
+H_theta:=45.0*deg;H_phi:=0.0*deg;			//todo: Changed angle to 45 deg
+//this will just be the min max fields choose the in plane (theta) and out of plane (phi) angles for the 
+H_theta2:=360.0*deg;H_phi2:=0.0*deg;ph_res:=3*deg;	
+//applied field direction when doing polar hysterisis simualtion H_theta and H_theta2 etc. select angle range
+perp:=0												//this will apply the field perpendiculr to the direction the sample is initially magnetised
+loadGS:=0
+loadGS_dir:=sprintf("C://Users//SSP-lab//Documents//mumax3//Troy//TRILAYER//P760_L550_W160_TT30_TB20_S30//NEGtoPOS.out//") 
+HS1:=0;HS2:=80;HS3:=260;HS4:=450;SAVEALL:=0  //choose a number of fields to save ovf for during a FMR sweep
+
+//GLOBAL MAGNETISATION for ASI-hybrid sets underlayer M
+global_m:=1;r:=-1; m_theta:=0.0*deg;m_phi:=0.0*deg
+rand_m:=0
+
+//EXCITATION
+f := 15.0e9	 //frequency
+Amp := 0.015	 //amplitude
+tstep := 1/(2*f)	//timestep automatically calculated from Nyquist frequency
+tot := tstep*1000
+tsim := trunc(tot / tstep)
+pause := tot/4
+AC_x:=1;AC_y:=0;AC_z:=0;//direction of AC field
+//ANTENNA TYPE
+homo:=1;antenna:=0;antenni:=0;a_wg:=100.0e-6;w_wg_x:=8*cx;w_wg_y:=inf;
+//SINC IN SPACE	
+sincpulse:=0;kx_w:=1;ky_w:=1000
+
+//  .dP"Y8 88 8b    d8 88""Yb 88     888888      dP"Yb  88""Yb 888888 88  dP"Yb  88b 88 .dP"Y8 
+//  `Ybo." 88 88b  d88 88__dP 88     88__       dP   Yb 88__dP   88   88 dP   Yb 88Yb88 `Ybo." 
+//  o.`Y8b 88 88YbdP88 88"""  88  .o 88""       Yb   dP 88"""    88   88 Yb   dP 88 Y88 o.`Y8b 
+//  8bodP' 88 88 YY 88 88     88ood8 888888      YbodP  88       88   88  YbodP  88  Y8 8bodP'
+
+//geometry: 0 = same as mesh, 1 = island, 2 = ellipse, 3 = cuboid
+shape:=1; L:=180e-9; W:=20e-9; TT:=cz;extra_y:=0;
+//ISLAND CUTS
+cut:=1  //cut into edges as a fraction of width set to 1 for no cuts
+c_degL:=30 ;c_degR:=-30  //choose direction of cuts //for each island end
+alt:=1
+cut_U:=cut
+c_degL_U:=30 ;c_degR_U:=-30
+//rotation in degrees
+rot45:=(45+0)*deg;rot135:=(135+0)*deg;rot225:=(225+0)*deg;rot315:=(315+0)*deg
+//change these settings for relative rotaion between assymetric islands
+
+//GROOVEPARAMETERS
+grooves:=0
+w_g:=100.0e-9;a_g:=100.0e-9;N_g:=trunc(L/a_g+0.1);//print(N_g)
+y_off:=0; t_g:=10e-9;  airgap:=20e-9
+//Msati_g:=185; damping_g:=0.0003;ex_stiff_g:=3.1  	//kA/m, ,pJ   YIG
+//Msati_g:=800; damping_g:=0.005;ex_stiff_g:=13  	//kA/m, ,pJ   permalloy
+Msati_g:=1150; damping_g:=0.005;ex_stiff_g:=16  	//kA/m, ,pJ	  CoFeB
+L_up:=1;L_dn:=1;L_total:=L_up+L_dn
+
+//SPINSINK //THIS NEEDS TO BE MADE
+spin_sink:=0
+w_s:=6.0e-6; alpha_s:=0.5;
+
+//     db    .dP"Y8 88      dP"Yb  88""Yb 888888 88  dP"Yb  88b 88 .dP"Y8 
+//    dPYb   `Ybo." 88     dP   Yb 88__dP   88   88 dP   Yb 88Yb88 `Ybo." 
+//   dP__Yb  o.`Y8b 88     Yb   dP 88"""    88   88 Yb   dP 88 Y88 o.`Y8b 
+//  dP""""Yb 8bodP' 88      YbodP  88       88   88  YbodP  88  Y8 8bodP' 
+
+hex:=760.0e-9;xgap:=50*cx;ygap:=50*cy //gaps are for 2D array of islandsor extended underlayer //todo: Set the gap between islands to get them out of my simulation space.
+//LENGTH
+L1:=550.0e-9;	L2:=L1;
+L4:=L1;			L3:=L4;
+//WIDTH
+W1:=140.0e-9;	W2:=W1; //todo: Changed this to 140.
+W4:=W1;	W3:=W4;
+//VARIATION
+Lvar:=0e-9;Wvar:=0e-9		//variation normally distributed around selected param
+ii:=1; jj:=1     			 //number of ASI along x and y
+thickness:=20.0e-9;
+////////UNDER LAYER ////////
+t_UL:=30.0e-9; g_UL:=30e-9//thickness of bottom layer and gap
+l_UL:=inf;w_UL:=inf
+xo_U:=0;yo_U:=0*cy
+ex_scale:=1   //can scale exhcnage between layers instead of a physicsal gap
+ASI_underlayer:=1
+xLoff:=40e-9;yLoff:=40e-9;  //this offsets the top and bottom layers relative to each other //todo: Offset
+////////ASI UNDERLAYER/////////
+//LENGTH
+L1U:=L1;	L2U:=L1U
+L4U:=L1U;	L3U:=L2U;
+//WIDTH
+W1U:=W1;	W2U:=W1U;
+W4U:=W1U;	W3U:=W1U;
+
+//MAGNETISATION STATE 0=out 1=in vortex (circ,pol): 2=(1,1) 3=(-1,1) 4=(1,-1) 5=(-1,-1) 7=random 
+M1:=0;  M2:=2;				//todo: Changed to -x macrospin for top layer.
+M4:=2;  M3:=2;			
+
+M1U:=2;  M2U:=2;		//todo: Changed to CW vortex for bottom layer.
+M4U:=2;  M3U:=2;			
+
+//STATE CYCLE SIM 4 OPTIONS
+//loops from i to f. Best to set the options for one layer otherwise too many files
+M1_i:=2;  M2_i:=2;	M1_f:=2;  M2_f:=2;	
+M4_i:=2;  M3_i:=2;	M4_f:=2;  M3_f:=2;
+
+M1U_i:=2;  M2U_i:=2;	M1U_f:=2;  M2U_f:=2;	
+M4U_i:=2;  M3U_i:=2;	M4U_f:=2;  M3U_f:=2;	
+
+rel:=0   //top and bottom 	0=unrelated 	1=parallal		2=antiparallel
+
+//MFM OPTIONS
+MFM_png:=0		// 10nm 40nm adnd 90nm lift set to 1 
+MFM_lifts:=1	// set to one to choose range of tip heights to save
+l_low:=50;l_res:=25;l_hi:=55
+zextra:=0  //bug with mumax requires 7 cells in z to do mfm so need to pad with extra empty cells	
+
+
+//   dP""b8 88""Yb  dP"Yb  88""Yb 88""Yb 88 88b 88  dP""b8 
+//  dP   `" 88__dP dP   Yb 88__dP 88__dP 88 88Yb88 dP   `" 
+//  Yb      88"Yb  Yb   dP 88"""  88"""  88 88 Y88 Yb  "88 
+//   YboodP 88  Yb  YbodP  88     88     88 88  Y8  YboodP 
+
+Fcropx:=1  //middle fraction
+Fcropy:=1   //set to 1 for no cropping
+Fcropz:=1	//set to 0 to crop by index
+
+//crop by index
+crop_x1:=0;crop_x2:=1
+crop_y1:=0;crop_y2:=1
+crop_z1:=3;crop_z2:=10
+
+//CHECKS
+//check time is even
+if tsim>1 && remainder(tsim,2) != 0{
+tsim = tsim+1
+}
+magT:=m
+if ASI_saved_geom==1{magT:=m_full}
+
+
+//Which paramater in last box
+param=H
+
+
+//   dP""b8 888888  dP"Yb  8b    d8 888888 888888 88""Yb Yb  dP 
+//  dP   `" 88__   dP   Yb 88b  d88 88__     88   88__dP  YbdP  
+//  Yb  "88 88""   Yb   dP 88YbdP88 88""     88   88"Yb    8P   
+//   YboodP 888888  YbodP  88 YY 88 888888   88   88  Yb  dP    
+
+if 1==1{
+
+//  .dP"Y8 88 8b    d8 88""Yb 88     888888      dP""b8 888888  dP"Yb  8b    d8 888888 888888 88""Yb Yb  dP 
+//  `Ybo." 88 88b  d88 88__dP 88     88__       dP   `" 88__   dP   Yb 88b  d88 88__     88   88__dP  YbdP  
+//  o.`Y8b 88 88YbdP88 88"""  88  .o 88""       Yb  "88 88""   Yb   dP 88YbdP88 88""     88   88"Yb    8P   
+//  8bodP' 88 88 YY 88 88     88ood8 888888      YboodP 888888  YbodP  88 YY 88 888888   88   88  Yb  dP    
+
+if simple_geometry==1{
+	print("SIMPLE GEOMETRY")
+
+//CALCULATE MESH
+Nx = trunc((L/ cx))
+if Nx>1 && remainder(Nx,2) != 0{
+Nx = Nx+1
+}
+
+
+if y_off==0{
+Ny = trunc((W/ cy))+extra_y
+}
+if y_off>0{	
+Ny = trunc(((W + t_g + airgap)/cy)+0.1)
+}
+
+Nz = trunc((TT/ cz))
+if Nz>1 && remainder(Nz,2) != 0{
+//Nz = Nz+1
+}
+
+half:=(Ny/2)*cy
+bottom= -half + W/2
+top= half - t_g/2
+print(top)
+print(half)
+print(bottom)
+
+if Fcropx > 0{
+crop_x1=trunc(Nx/2-Fcropx*Nx/2); crop_x2=trunc(Nx/2+Fcropx*Nx/2);
+}
+if Fcropy > 0{
+crop_y1=trunc(Ny/2-Fcropy*Ny/2); crop_y2=trunc(Ny/2+Fcropy*Ny/2);
+}
+if Fcropz > 0{
+crop_z1=trunc(Nz/2-Fcropz*Nz/2); crop_z2=trunc(Nz/2+Fcropz*Nz/2);
+}
+
+
+
+//DECLARE TABLES
+if tables==1{
+//Number of cells
+TableAddVar(Nxc, "Nx", "")
+TableAddVar(Nyc, "Ny", "")
+TableAddVar(Nzc, "Nz", "")
+//Cell size
+TableAddVar(cx, "cell size x", "nm")
+TableAddVar(cy, "cell size y", "nm")
+TableAddVar(cz, "cell size z", "nm")
+//Material properties
+TableAddVar(Msati, "Msat", "kA/m")
+TableAddVar(damping, "damping", "")
+TableAddVar(ex_stiff, "Aex", "J")
+//Global magnetisation
+TableAddVar(m_theta*(180/pi), "m_theta", "in-plane")
+TableAddVar(m_phi*(180/pi), "m_phi", "out-of-plane")
+//Field magnitude and direction
+TableAddVar(H, "field", "oe")
+TableAddVar(H_theta*(180/pi), "H_theta", "in-plane")
+TableAddVar(H_phi*(180/pi), "H_phi", "out-of-plane")
+//Excitation requency and amplitude
+TableAddVar(f*1e-9, "frequency", "GHz")
+TableAddVar(Amp/10000, "amplitude", "oe")
+//Output quantities
+tableAdd(B_demag) 
+tableAdd(E_demag) 
+tableAdd(E_total) 
+tableAdd(B_ext) 
+tableadd(m.region(10))
+tableadd(m.region(11))
+tableadd(m.region(22))
+tableAdd(B_ext.region(11)) 
+tableAdd(B_ext.region(22)) 
+TableAddVar(param, "parameter", "")
+}
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//SET MESH
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+setgridsize(Nx, Ny, Nz)
+setcellsize(cx, cy, cz)
+
+if PBCs==1{
+setPBC(PX, PY, PZ)
+}
+
+
+
+
+Nxx:=Nx;Nyy:=Ny;Nzz:=Nz;
+Nxc=crop_x2-crop_x1
+Nyc=crop_y2-crop_y1
+Nzc=crop_z2-crop_z1
+
+
+
+//MATERIAL PARAMETERS
+Msat = Msati*1e3
+Aex = ex_stiff*1e-12
+alpha = damping
+EdgeSmooth = 8
+if demagOFF==1{
+EnableDemag = false
+}
+
+
+
+island := universe().sub(universe())
+islands := universe().sub(universe())
+tempisland := universe().sub(universe())
+bislands := universe().sub(universe())
+rislands := universe().sub(universe())
+
+//SET GEOMETRY
+if simple_geometry==1{	
+
+
+	if shape==1{
+	//island
+	recta := cuboid(L-W, W, TT).transl(0,0,0).transl(0,bottom,0)
+//////CUTS
+cut_i:=cuboid(W*cut, W*cut,TT)
+cutter1:= (cut_i.transl(-W*cut,0,0)).rotz(pi/4+c_degL*(pi/180))
+cutter2:= (cut_i.transl(0,W*cut,0)).rotz(pi/4+c_degL*(pi/180))
+cutterL:=cutter1.add(cutter2)
+cutter3:= (cut_i.transl(W*cut,0,0)).rotz(-pi/4-c_degR*(pi/180))
+cutter4:= (cut_i.transl(0,W*cut,0)).rotz(-pi/4-c_degR*(pi/180))
+cutterR:=cutter3.add(cutter4)
+
+circ:=cylinder(W, TT)
+Lend:=circ.sub(cutterL)
+Rend:=circ.sub(cutterR)
+
+if c_degL>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+if c_degL<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+if c_degL==0{addL=universe().inverse()}
+if c_degR>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+if c_degR<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+if c_degR==0{addR=universe().inverse()}
+	
+left:=(addL.add(Lend)).transl(-L/2+W/2, 0, 0).transl(0,bottom,0)
+right:=(addR.add(Rend)).transl(L/2-W/2, 0, 0).transl(0,bottom,0)
+
+	island = recta.add(left).add(right)
+	setgeom(island)
+	}
+	if shape==2{
+	//ellipse
+	island=Ellipse(L, W)
+	setgeom(island)
+	}
+	if shape==3{
+	//cuboid
+	island=cuboid(L, W, TT).transl(0,0,0).transl(0,bottom,0)
+	setgeom(island)
+	}
+	
+	//ADD GROOVES
+	if grooves==1{
+		//for even ensures central
+		if remainder(N_g,2)==0&&N_g>0{
+			
+		for blue:=1; blue<=L_up; blue++{
+		for g=blue; g<=N_g; g=g+L_total{	
+		tempisland = cuboid(w_g,t_g,Nz*cz).transl(-a_g*(N_g/2)+a_g*(g-1)+a_g/2,0,0).transl(0,top,0)
+		bislands = bislands.add(tempisland)
+		//print(g)
+		}	
+		}		
+		defregion(30,bislands)	
+		m.setregion(30,uniform(0,1,0))
+		Msat.setregion(30,Msati_g*1e3)
+		alpha.setregion(30,damping_g)
+		Aex.setregion(30,ex_stiff_g*1e-12)
+	
+		
+		for red:=L_up+1; red<=L_total; red++{
+		for g=red; g<=N_g; g=g+L_total{	
+		tempisland = cuboid(w_g,t_g,Nz*cz).transl(-a_g*(N_g/2)+a_g*(g-1)+a_g/2,0,0).transl(0,top,0)
+		rislands = rislands.add(tempisland)
+		//print(g)
+		}	
+		}		
+		defregion(31,rislands)	
+		m.setregion(31,uniform(0,-1,0))
+		Msat.setregion(31,Msati_g*1e3)
+		alpha.setregion(31,damping_g)
+		Aex.setregion(31,ex_stiff_g*1e-12)
+	
+	}
+		
+	//for odd ensures central	
+		if remainder(N_g,2)!=0{		
+		for blue:=1; blue<=L_up; blue++{
+		for g=blue; g<=N_g; g=g+L_total{	
+		tempisland = cuboid(w_g,t_g,Nz*cz).transl(-a_g*((N_g-1)/2)+a_g*(g-1),0,0).transl(0,top,0)
+		bislands = bislands.add(tempisland)
+		//print(g)
+		}	
+		}		
+		defregion(30,bislands)	
+		m.setregion(30,uniform(0,1,0))
+		Msat.setregion(30,Msati_g*1e3)
+		alpha.setregion(30,damping_g)
+		Aex.setregion(30,ex_stiff_g*1e-12)
+		
+		for red:=L_up+1; red<=L_total; red++{
+		for g=red; g<=N_g; g=g+L_total{	
+		tempisland = cuboid(w_g,t_g,Nz*cz).transl(-a_g*((N_g-1)/2)+a_g*(g-1),0,0).transl(0,top,0)
+		rislands = rislands.add(tempisland)
+		//print(g)
+		}	
+		}		
+		defregion(31,rislands)	
+		m.setregion(31,uniform(0,-1,0))
+		Msat.setregion(31,Msati_g*1e3)
+		alpha.setregion(31,damping_g)
+		Aex.setregion(31,ex_stiff_g*1e-12)		
+	}
+islands=bislands.add(rislands)
+	
+geometry:=islands.add(island)
+
+	
+}
+
+//islands=islands
+//island=island
+
+//geometry:=islands.add(island)
+//setgeom(geometry)	
+
+	
+}
+
+	defregion(10,island)
+
+	
+geomname:=sprintf("%03.0fnm_geom.png",abs(param))
+snapshotas(geom, geomname)
+OutputFormat = OVF2_BINARY
+geomname=sprintf("geom.ovf")
+saveas(geom,geomname)
+OutputFormat = OVF1_TEXT
+
+//global M
+
+m.setregion(10, uniform(r*(cos(m_theta)*cos(m_phi)), r*(sin(m_theta)*cos(m_phi)), r*sin(m_phi)))  
+if rand_m==1{
+m.setregion(10,randommag())	
+}
+
+
+if y_off>0{
+	m.setregion(30,uniform(0,0,1))
+	m.setregion(31,uniform(0,0,-1))
+}
+
+//ADD CPW
+if antenni>0{
+defregion(11,cuboid(w_wg_x,w_wg_y,Nz*cz).transl(-a_wg/2-w_wg_x/2,0,0))
+defregion(22,cuboid(w_wg_x,w_wg_y,Nz*cz).transl(a_wg/2+w_wg_x/2,0,0))
+	Msat.setregion(11,Msati*1e3)
+	alpha.setregion(11,damping)
+	Aex.setregion(11,ex_stiff*1e-12)
+	Msat.setregion(22,Msati*1e3)
+	alpha.setregion(22,damping)
+	Aex.setregion(22,ex_stiff*1e-12)
+}
+if antenna>0{
+	defregion(11,cuboid(w_wg_x,w_wg_y,Nz*cz))
+	Msat.setregion(11,Msati*1e3)
+	alpha.setregion(11,damping)
+	Aex.setregion(11,ex_stiff*1e-12)
+}
+
+
+
+}
+
+
+//     db    .dP"Y8 88      dP""b8 888888  dP"Yb  8b    d8 888888 888888 88""Yb Yb  dP 
+//    dPYb   `Ybo." 88     dP   `" 88__   dP   Yb 88b  d88 88__     88   88__dP  YbdP  
+//   dP__Yb  o.`Y8b 88     Yb  "88 88""   Yb   dP 88YbdP88 88""     88   88"Yb    8P   
+//  dP""""Yb 8bodP' 88      YboodP 888888  YbodP  88 YY 88 888888   88   88  Yb  dP  
+
+if ASI_geometry==1{
+print("ASI GEOMETRY")
+hex2:=(2*hex)/sqrt(2)	
+LX:=ii*hex2+xgap;LY:=jj*hex2+ygap;
+//CALCULATE MESH
+Nx = trunc(LX/ cx)
+
+if Nx>1 && remainder(Nx,2) != 0{
+Nx = Nx+1
+}
+Ny = trunc(LY/ cy)
+if Ny>1 && remainder(Ny,2) != 0{
+Ny = Ny+1
+}
+Nz = trunc(thickness/ cz)
+if Nz>1 && remainder(Nz,2) != 0{
+Nz = Nz+1
+}	
+if t_UL>0{	
+Nz = trunc(((thickness + t_UL + g_UL)/cz)+0.1)
+
+}
+Nz=Nz+zextra
+
+half:=(Nz/2)*cz
+bottom= -half + t_UL/2
+top= half - thickness/2
+
+print(top)
+print(half)
+print(bottom)
+
+if Fcropx > 0{
+crop_x1=trunc(Nx/2-Fcropx*Nx/2); crop_x2=trunc(Nx/2+Fcropx*Nx/2);
+}
+if Fcropy > 0{
+crop_y1=trunc(Ny/2-Fcropy*Ny/2); crop_y2=trunc(Ny/2+Fcropy*Ny/2);
+}
+if Fcropz > 0{
+crop_z1=trunc(Nz/2-Fcropz*Nz/2); crop_z2=trunc(Nz/2+Fcropz*Nz/2);
+}
+
+//DECLARE TABLES
+if tables==1{
+
+//Number of cells
+TableAddVar(Nxc, "Nx", "")
+TableAddVar(Nyc, "Ny", "")
+TableAddVar(Nzc, "Nz", "")
+//Cell size
+TableAddVar(cx, "cell size x", "nm")
+TableAddVar(cy, "cell size y", "nm")
+TableAddVar(cz, "cell size z", "nm")
+//Material properties
+TableAddVar(Msati, "Msat", "kA/m")
+TableAddVar(damping, "damping", "")
+TableAddVar(ex_stiff, "Aex", "J")
+//Global magnetisation
+TableAddVar(m_theta*(180/pi), "m_theta", "in-plane")
+TableAddVar(m_phi*(180/pi), "m_phi", "out-of-plane")
+//Field magnitude and direction
+TableAddVar(H, "field", "oe")
+TableAddVar(H_theta*(180/pi), "H_theta", "in-plane")
+TableAddVar(H_phi*(180/pi), "H_phi", "out-of-plane")
+//Excitation requency and amplitude
+TableAddVar(f*1e-9, "frequency", "GHz")
+TableAddVar(Amp/10000, "amplitude", "oe")
+//Output quantities
+tableAdd(B_demag) 
+tableAdd(E_demag) 
+tableAdd(E_total) 
+tableAdd(B_ext) 
+tableadd(m.region(10))
+tableadd(m.region(1))
+tableadd(m.region(2))	
+tableadd(m.region(3))	
+tableadd(m.region(4))	
+if ASI_underlayer==1{
+tableadd(m.region(5))
+tableadd(m.region(6))	
+tableadd(m.region(7))	
+tableadd(m.region(8))
+}
+tableadd(m.region(11))	
+tableadd(m.region(22))
+TableAddVar(param, "parameter", "")
+}
+	
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//SET MESH
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+setgridsize(Nx, Ny, Nz)
+setcellsize(cx, cy, cz)
+if PBCs==1{
+setPBC(PX, PY, PZ)
+}	
+
+Nxc=crop_x2-crop_x1
+Nyc=crop_y2-crop_y1
+Nzc=crop_z2-crop_z1
+
+
+//MATERIAL PARAMETERS
+Msat = Msati*1e3
+Aex = ex_stiff*1e-12
+alpha = damping
+EdgeSmooth = 8	
+if demagOFF==1{
+EnableDemag = false
+}
+
+
+xcentre:=(sqrt(2)*hex)/2
+xshift:=-(Nx/2)*cx+xcentre//-(Nx/4)*c
+yshift:=-(Ny/2)*cy+xcentre
+	
+	
+//Initilialise Paramters for Geometry
+TLisland := universe().sub(universe())
+TLislands := universe().sub(universe())
+TLislandT := universe().sub(universe())
+TLislandsB:= universe().sub(universe())
+BRisland := universe().sub(universe())
+BRislands := universe().sub(universe())
+BRislandT := universe().sub(universe())
+BRislandsB:= universe().sub(universe())
+TRisland := universe().sub(universe())
+TRislands := universe().sub(universe())
+TRislandT := universe().sub(universe())
+TRislandsB:= universe().sub(universe())
+BLisland := universe().sub(universe())
+BLislands := universe().sub(universe())
+BLislandT := universe().sub(universe())
+BLislandsB:= universe().sub(universe())
+sample := universe().sub(universe())
+recta := universe().sub(universe())
+left:=universe().sub(universe())
+right:=universe().sub(universe())
+island:=universe().sub(universe())
+islands:=universe().sub(universe())
+
+
+	
+
+	if Lvar>0||Wvar>0||xgap>0||ygap>0{
+print("ASI QUENCHED OR GAPS")		
+//TOP LEFT NANOWIRE
+//Initialise TL nanowires
+for i:=0; i<=ii-1; i++{
+	for j:=0; j<=jj-1; j++{	
+		randomL:=rand();length:=L1+Lvar*randomL
+		randomW:=rand();width:=W1+Wvar*randomW		
+		recta := cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,top)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut, width*cut,thickness)
+		if alt==1{c_degL=-c_degL;c_degR=-c_degR}
+		cutter1:= (cut_i.transl(-width*cut,0,0)).rotz(pi/4+c_degL*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut,0)).rotz(pi/4+c_degL*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut,0,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL==0{addL=universe().inverse()}
+		if c_degR>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR==0{addR=universe().inverse()}		
+		left := (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,top)
+		right := (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,top)		
+		//////////////////////////////////////////////////////////
+		island := recta.add(left).add(right)	
+		island = island.rotz(rot315)
+		island = island.transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),0)
+		TLislandT = TLislandT.add(island.transl(sqrt(2)*hex*i,sqrt(2)*hex*j,0))
+		if alt==1{c_degL=-c_degL;c_degR=-c_degR}
+
+	}
+}
+
+TLislands = (TLislandT.transl(xshift+xgap/2,yshift+ygap/2,0)).transl(xLoff/2,yLoff/2,0)
+defregion(1,TLislands)
+
+//TOP RIGHT NANOWIRE
+//Initialise TR nanowires	
+for i:=0; i<=ii-1; i++{
+	for j:=0; j<=jj-1; j++{	
+		randomL:=rand();length:=L2+Lvar*randomL
+		randomW:=rand();width:=W2+Wvar*randomW	
+		recta := cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,top)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut, width*cut,thickness)
+		cutter1:= (cut_i.transl(-width*cut,0,0)).rotz(pi/4+c_degL*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut,0)).rotz(pi/4+c_degL*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut,0,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL==0{addL=universe().inverse()}
+		if c_degR>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR==0{addR=universe().inverse()}		
+		left := (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,top)
+		right := (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,top)		
+		//////////////////////////////////////////////////////////
+		island := recta.add(left).add(right)	
+		island = island.rotz(rot45)
+		island = island.transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),0)
+		TRislandT = TRislandT.add(island.transl(sqrt(2)*hex*i,sqrt(2)*hex*j,0))
+	}
+}
+TRislands = (TRislandT.transl(xshift+xgap/2,yshift+ygap/2,0)).transl(xLoff/2,yLoff/2,0)
+defregion(2,TRislands)
+
+//BOTTOM RIGHT NANOWIRE
+//Initialise BR nanowires
+for i:=0; i<=ii-1; i++{
+	for j:=0; j<=jj-1; j++{	
+		randomL:=rand();length:=L3+Lvar*randomL
+		randomW:=rand();width:=W3+Wvar*randomW		
+		recta:= cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,top)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut, width*cut,thickness)
+		if alt==1{c_degL=-c_degL;c_degR=-c_degR}
+		cutter1:= (cut_i.transl(-width*cut,0,0)).rotz(pi/4+c_degL*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut,0)).rotz(pi/4+c_degL*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut,0,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL==0{addL=universe().inverse()}
+		if c_degR>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR==0{addR=universe().inverse()}		
+		left := (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,top)
+		right := (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,top)		
+		//////////////////////////////////////////////////////////
+		island := recta.add(left).add(right)	
+		island = island.rotz(rot135)
+		island = island.transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),0)
+		BRislandT = BRislandT.add(island.transl(sqrt(2)*hex*i,sqrt(2)*hex*j,0))
+		if alt==1{c_degL=-c_degL;c_degR=-c_degR}
+	}
+}
+BRislands = (BRislandT.transl(xshift+xgap/2,yshift+ygap/2,0)).transl(xLoff/2,yLoff/2,0)
+defregion(3,BRislands)
+
+//BOTTOM LEFT NANOWIRE
+//Initialise BL nanowires
+for i:=0; i<=ii-1; i++{
+	for j:=0; j<=jj-1; j++{	
+		randomL:=rand();length:=L4+Lvar*randomL
+		randomW:=rand();width:=W4+Wvar*randomW		
+		recta:= cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,top)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut, width*cut,thickness)
+		cutter1:= (cut_i.transl(-width*cut,0,0)).rotz(pi/4+c_degL*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut,0)).rotz(pi/4+c_degL*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut,0,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL==0{addL=universe().inverse()}
+		if c_degR>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR==0{addR=universe().inverse()}		
+		left := (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,top)
+		right := (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,top)		
+		//////////////////////////////////////////////////////////
+		island := recta.add(left).add(right)			
+		island = island.rotz(rot225)
+		island = island.transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),0)
+		BLislandT = BLislandT.add(island.transl(sqrt(2)*hex*i,sqrt(2)*hex*j,0))
+	}
+}
+BLislands = (BLislandT.transl(xshift+xgap/2,yshift+ygap/2,0)).transl(xLoff/2,yLoff/2,0)
+defregion(4,BLislands)
+}
+
+
+
+
+	if Lvar==0&&Wvar==0&&xgap==0&&ygap==0{
+	print("ASI HOMOGENEOUS")
+//Initialise TL nanowires
+		length:=L1;width:=W1
+		recta := cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,top)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut, width*cut,thickness)
+		if alt==1{c_degL=-c_degL;c_degR=-c_degR}
+		cutter1:= (cut_i.transl(-width*cut,0,0)).rotz(pi/4+c_degL*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut,0)).rotz(pi/4+c_degL*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut,0,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL==0{addL=universe().inverse()}
+		if c_degR>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR==0{addR=universe().inverse()}		
+		left:= (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,top)
+		right:= (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,top)
+		////////////////////////////////////////
+		TLisland = recta.add(left).add(right)
+		TLisland = TLisland.rotz(rot315)
+		TLisland = TLisland.transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),0)
+		if alt==1{c_degL=-c_degL;c_degR=-c_degR}
+
+//Initialise TR nanowires	
+		length=L2;width=W2	
+		recta = cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,top)
+		///////////////CUTS//////////////
+		cut_i=cuboid(width*cut, width*cut,thickness)
+		cutter1= (cut_i.transl(-width*cut,0,0)).rotz(pi/4+c_degL*(pi/180))
+		cutter2= (cut_i.transl(0,width*cut,0)).rotz(pi/4+c_degL*(pi/180))
+		cutterL=cutter1.add(cutter2)
+		cutter3= (cut_i.transl(width*cut,0,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutter4= (cut_i.transl(0,width*cut,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutterR=cutter3.add(cutter4)
+		circ=cylinder(width, thickness)
+		Lend=circ.sub(cutterL)
+		Rend=circ.sub(cutterR)
+		if c_degL>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL==0{addL=universe().inverse()}
+		if c_degR>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR==0{addR=universe().inverse()}		
+		left = (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,top)
+		right = (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,top)
+		////////////////////////////////////////
+		TRisland = recta.add(left).add(right)	
+		TRisland = TRisland.rotz(rot45)	
+		TRisland = TRisland.transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),0)
+//Initialise BR nanowires
+		length=L3;width=W3	
+		recta = cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,top)
+		///////////////CUTS//////////////
+		cut_i=cuboid(width*cut, width*cut,thickness)
+		if alt==1{c_degL=-c_degL;c_degR=-c_degR}
+		cutter1= (cut_i.transl(-width*cut,0,0)).rotz(pi/4+c_degL*(pi/180))
+		cutter2= (cut_i.transl(0,width*cut,0)).rotz(pi/4+c_degL*(pi/180))
+		cutterL=cutter1.add(cutter2)
+		cutter3= (cut_i.transl(width*cut,0,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutter4= (cut_i.transl(0,width*cut,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutterR=cutter3.add(cutter4)
+		circ=cylinder(width, thickness)
+		Lend=circ.sub(cutterL)
+		Rend=circ.sub(cutterR)
+		if c_degL>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL==0{addL=universe().inverse()}
+		if c_degR>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR==0{addR=universe().inverse()}		
+		left = (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,top)
+		right= (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,top)
+		////////////////////////////////////////
+		BRisland = recta.add(left).add(right)
+		BRisland = BRisland.rotz(rot135)
+		BRisland = BRisland.transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),0)
+		if alt==1{c_degL=-c_degL;c_degR=-c_degR}
+//Initialise BL nanowires	
+		length=L4;width=W4	
+		recta = cuboid(L4-W4, W4, thickness).transl(0,0,0).transl(0,0,top)
+		///////////////CUTS//////////////
+		cut_i=cuboid(width*cut, width*cut,thickness)
+		cutter1= (cut_i.transl(-width*cut,0,0)).rotz(pi/4+c_degL*(pi/180))
+		cutter2= (cut_i.transl(0,width*cut,0)).rotz(pi/4+c_degL*(pi/180))
+		cutterL=cutter1.add(cutter2)
+		cutter3= (cut_i.transl(width*cut,0,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutter4= (cut_i.transl(0,width*cut,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutterR=cutter3.add(cutter4)
+		circ=cylinder(width, thickness)
+		Lend=circ.sub(cutterL)
+		Rend=circ.sub(cutterR)
+		if c_degL>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL==0{addL=universe().inverse()}
+		if c_degR>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR==0{addR=universe().inverse()}		
+		left = (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,top)
+		right = (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,top)
+		////////////////////////////////////////
+		BLisland = recta.add(left).add(right)		
+		BLisland = BLisland.rotz(rot225)	
+		BLisland = BLisland.transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),0)
+
+
+TLislands = (TLisland.repeat(hex2,hex2,0)).transl(xLoff/2,yLoff/2,0)
+defregion(1,TLislands)
+TRislands = (TRisland.repeat(hex2,hex2,0)).transl(xLoff/2,yLoff/2,0)
+defregion(2,TRislands)
+BRislands = (BRisland.repeat(hex2,hex2,0)).transl(xLoff/2,yLoff/2,0)
+defregion(3,BRislands)
+BLislands = (BLisland.repeat(hex2,hex2,0)).transl(xLoff/2,yLoff/2,0)
+defregion(4,BLislands)
+
+	}
+
+for i:=1;i<=4;i++{
+	Aex.setregion(i,ex_stiff*1e-12)
+	Msat.setregion(i,Msati*1e3)
+	alpha.setregion(i,damping)
+}
+
+
+
+
+
+
+if t_UL==0{		
+print("ASI")
+sample=(TRislands).add(BRislands).add(TLislands).add(BLislands)
+setgeom(sample)
+
+geomname:=sprintf("%03.0fnm_geom.png",abs(param))
+	Aex.setregion(10,ex_stiff*1e-12)
+	Msat.setregion(10,Msati*1e3)
+	alpha.setregion(10,damping)
+snapshotas(geom, geomname)	
+OutputFormat = OVF2_BINARY
+geomname=sprintf("geom.ovf")
+saveas(geom,geomname)
+OutputFormat = OVF1_TEXT
+
+
+}
+
+
+if t_UL>0{		
+print("ASI WITH UNDERLAYER")
+if ASI_underlayer==0{
+print("CONTINUOUS UNDERLAYER")
+UL:=cuboid(l_UL,w_UL,t_UL).transl(xo_U,yo_U,bottom)
+defregion(10,UL)
+sample=(TRislands).add(BRislands).add(TLislands).add(BLislands).add(UL)
+setgeom(sample)
+Aex.setregion(10,ex_stiff_UL*1e-12)
+Msat.setregion(10,Msati_UL*1e3)
+alpha.setregion(10,damping_UL)
+}
+
+if ASI_underlayer==1{
+print("ASI UNDERLAYER")
+
+	if Lvar>0||Wvar>0{
+print("ASI QUENCHED UNDERLAYER")		
+//TOP LEFT NANOWIRE
+//Initialise TL nanowires
+for i:=0; i<=ii-1; i++{
+	for j:=0; j<=jj-1; j++{	
+		randomL:=rand();length:=L1U+Lvar*randomL
+		randomW:=rand();width:=W1U+Wvar*randomW	
+		thickness:=t_UL
+		recta := cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,bottom)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut_u, width*cut_u,thickness)
+		if alt==1{c_degL_u=-c_degL_u;c_degR_u=-c_degR_u}
+		cutter1:= (cut_i.transl(-width*cut_u,0,0)).rotz(pi/4+c_degL_U*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut_u,0)).rotz(pi/4+c_degL_U*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut_u,0,0)).rotz(-pi/4-c_degR_U*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut_u,0)).rotz(-pi/4-c_degR_U*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL_u>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL_u<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL_u==0{addL=universe().inverse()}
+		if c_degR_u>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR_u<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR_u==0{addR=universe().inverse()}		
+		left := (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,bottom)
+		right := (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,bottom)		
+		//////////////////////////////////////////////////////////
+		island := recta.add(left).add(right)	
+		island = island.rotz(rot135)
+		island = island.transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),0)
+		TLislandT = TLislandT.add(island.transl(sqrt(2)*hex*i,sqrt(2)*hex*j,0))
+		if alt==1{c_degL_u=-c_degL_u;c_degR_u=-c_degR_u}
+
+	}
+}
+
+TLislandsB = (TLislandT.transl(xshift,yshift,0)).transl(-xLoff/2,-yLoff/2,0)
+defregion(5,TLislandsB)
+
+//TOP RIGHT NANOWIRE
+//Initialise TR nanowires	
+for i:=0; i<=ii-1; i++{
+	for j:=0; j<=jj-1; j++{	
+		randomL:=rand();length:=L2U+Lvar*randomL
+		randomW:=rand();width:=W2U+Wvar*randomW	
+		thickness:=t_UL
+		recta := cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,bottom)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut_u, width*cut_u,thickness)
+		cutter1:= (cut_i.transl(-width*cut_u,0,0)).rotz(pi/4+c_degL_U*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut_u,0)).rotz(pi/4+c_degL_U*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut_u,0,0)).rotz(-pi/4-c_degR_U*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut_u,0)).rotz(-pi/4-c_degR_U*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL_u>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL_u<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL_u==0{addL=universe().inverse()}
+		if c_degR_u>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR_u<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR_u==0{addR=universe().inverse()}		
+		left := (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,bottom)
+		right := (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,bottom)		
+		//////////////////////////////////////////////////////////
+		island := recta.add(left).add(right)	
+		island = island.rotz(rot45)
+		island = island.transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),0)
+		TRislandT = TRislandT.add(island.transl(sqrt(2)*hex*i,sqrt(2)*hex*j,0))
+	}
+}
+TRislandsB = (TRislandT.transl(xshift,yshift,0)).transl(-xLoff/2,-yLoff/2,0)
+defregion(6,TRislandsB)
+
+//BOTTOM RIGHT NANOWIRE
+//Initialise BR nanowires
+for i:=0; i<=ii-1; i++{
+	for j:=0; j<=jj-1; j++{	
+		randomL:=rand();length:=L3U+Lvar*randomL
+		randomW:=rand();width:=W3U+Wvar*randomW	
+		thickness:=t_UL		
+		recta:= cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,bottom)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut_u, width*cut_u,thickness)
+		if alt==1{c_degL_u=-c_degL_u;c_degR_u=-c_degR_u}
+		cutter1:= (cut_i.transl(-width*cut_u,0,0)).rotz(pi/4+c_degL_U*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut_u,0)).rotz(pi/4+c_degL_U*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut_u,0,0)).rotz(-pi/4-c_degR_U*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut_u,0)).rotz(-pi/4-c_degR_U*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL_u>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL_u<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL_u==0{addL=universe().inverse()}
+		if c_degR_u>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR_u<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR_u==0{addR=universe().inverse()}		
+		left := (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,bottom)
+		right := (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,bottom)		
+		//////////////////////////////////////////////////////////
+		island := recta.add(left).add(right)	
+		island = island.rotz(rot135)
+		island = island.transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),0)
+		BRislandT = BRislandT.add(island.transl(sqrt(2)*hex*i,sqrt(2)*hex*j,0))
+		if alt==1{c_degL_u=-c_degL_u;c_degR_u=-c_degR_u}
+	}
+}
+BRislandsB = (BRislandT.transl(xshift,yshift,0)).transl(-xLoff/2,-yLoff/2,0)
+defregion(7,islands)
+
+//BOTTOM LEFT NANOWIRE
+//Initialise BL nanowires
+for i:=0; i<=ii-1; i++{
+	for j:=0; j<=jj-1; j++{	
+		randomL:=rand();length:=L4U+Lvar*randomL
+		randomW:=rand();width:=W4U+Wvar*randomW		
+		thickness:=t_UL
+		recta:= cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,bottom)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut, width*cut,thickness)
+		cutter1:= (cut_i.transl(-width*cut,0,0)).rotz(pi/4+c_degL*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut,0)).rotz(pi/4+c_degL*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut,0,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL_u>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL_u<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL_u==0{addL=universe().inverse()}
+		if c_degR_u>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR_u<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR_u==0{addR=universe().inverse()}		
+		left := (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,bottom)
+		right := (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,bottom)		
+		//////////////////////////////////////////////////////////
+		island := recta.add(left).add(right)			
+		island = island.rotz(rot45)
+		island = island.transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),0)
+		BLislandT = BLislandT.add(island.transl(sqrt(2)*hex*i,sqrt(2)*hex*j,0))
+	}
+}
+BLislandsB = (BLislandT.transl(xshift,yshift,0)).transl(-xLoff/2,-yLoff/2,0)
+defregion(8,BLislandsB)
+}
+
+
+
+
+	if Lvar==0&&Wvar==0{
+	print("ASI HOMOGENEOUS UNDERLAYER")
+//Initialise TL nanowires
+		length:=L1U;width:=W1U;thickness:=t_UL		
+		recta := cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,bottom)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut_u, width*cut_u,thickness)
+		if alt==1{c_degL_u=-c_degL_u;c_degR_u=-c_degR_u}
+		cutter1:= (cut_i.transl(-width*cut_u,0,0)).rotz(pi/4+c_degL_u*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut_u,0)).rotz(pi/4+c_degL_u*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut_u,0,0)).rotz(-pi/4-c_degR_u*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut_u,0)).rotz(-pi/4-c_degR_u*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL_u>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL_u<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL_u==0{addL=universe().inverse()}
+		if c_degR_u>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR_u<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR_u==0{addR=universe().inverse()}		
+		left := (addL.add(Lend)).transl(-(L1-W1)/2, 0, 0).transl(0,0,bottom)
+		right := (addR.add(Rend)).transl((L1-W1)/2, 0, 0).transl(0,0,bottom)
+		////////////////////////////////////////
+		TLisland = recta.add(left).add(right)
+		TLisland = TLisland.rotz(rot315)
+		TLisland = TLisland.transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),0)
+		if alt==1{c_degL_u=-c_degL_u;c_degR_u=-c_degR_u}
+//Initialise TR nanowires		
+		length=L2U;width=W2U;thickness=t_UL
+		recta = cuboid(length-width, width,thickness).transl(0,0,0).transl(0,0,bottom)
+		///////////////CUTS//////////////
+		cut_i=cuboid(width*cut_u, width*cut_u,thickness)
+		cutter1= (cut_i.transl(-width*cut_u,0,0)).rotz(pi/4+c_degL_u*(pi/180))
+		cutter2= (cut_i.transl(0,width*cut_u,0)).rotz(pi/4+c_degL_u*(pi/180))
+		cutterL=cutter1.add(cutter2)
+		cutter3= (cut_i.transl(width*cut_u,0,0)).rotz(-pi/4-c_degR_u*(pi/180))
+		cutter4= (cut_i.transl(0,width*cut_u,0)).rotz(-pi/4-c_degR_u*(pi/180))
+		cutterR=cutter3.add(cutter4)
+		circ=cylinder(width, thickness)
+		Lend=circ.sub(cutterL)
+		Rend=circ.sub(cutterR)
+		if c_degL_u>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL_u<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL_u==0{addL=universe().inverse()}
+		if c_degR_u>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR_u<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR_u==0{addR=universe().inverse()}		
+		left = (addL.add(Lend)).transl(-(L1-W1)/2, 0, 0).transl(0,0,bottom)
+		right = (addR.add(Rend)).transl((L1-W1)/2, 0, 0).transl(0,0,bottom)
+		////////////////////////////////////////
+		TRisland = recta.add(left).add(right)	
+		TRisland = TRisland.rotz(rot45)	
+		TRisland = TRisland.transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),0)
+//Initialise BR nanowires
+		length=L3U;width=W3U;thickness=t_UL
+		recta = cuboid(length-width, width,thickness).transl(0,0,0).transl(0,0,bottom)
+		///////////////CUTS//////////////
+		cut_i=cuboid(width*cut_u, width*cut_u,thickness)
+		if alt==1{c_degL_u=-c_degL_u;c_degR_u=-c_degR_u}
+		cutter1= (cut_i.transl(-width*cut_u,0,0)).rotz(pi/4+c_degL_u*(pi/180))
+		cutter2= (cut_i.transl(0,width*cut_u,0)).rotz(pi/4+c_degL_u*(pi/180))
+		cutterL=cutter1.add(cutter2)
+		cutter3= (cut_i.transl(width*cut_u,0,0)).rotz(-pi/4-c_degR_u*(pi/180))
+		cutter4= (cut_i.transl(0,width*cut_u,0)).rotz(-pi/4-c_degR_u*(pi/180))
+		cutterR=cutter3.add(cutter4)
+		circ=cylinder(width, thickness)
+		Lend=circ.sub(cutterL)
+		Rend=circ.sub(cutterR)
+		if c_degL_u>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL_u<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL_u==0{addL=universe().inverse()}
+		if c_degR_u>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR_u<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR_u==0{addR=universe().inverse()}		
+		left = (addL.add(Lend)).transl(-(L1-W1)/2, 0, 0).transl(0,0,bottom)
+		right = (addR.add(Rend)).transl((L1-W1)/2, 0, 0).transl(0,0,bottom)
+		////////////////////////////////////////
+		BRisland = recta.add(left).add(right)
+		BRisland = BRisland.rotz(rot135)
+		BRisland = BRisland.transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),0)
+		if alt==1{c_degL_u=-c_degL_u;c_degR_u=-c_degR_u}
+//Initialise BL nanowires		
+		length=L4U;width=W4U;thickness=t_UL
+		recta = cuboid(length-width, width,thickness).transl(0,0,0).transl(0,0,bottom)
+		///////////////CUTS//////////////
+		cut_i=cuboid(width*cut_u, width*cut_u,thickness)
+		cutter1= (cut_i.transl(-width*cut_u,0,0)).rotz(pi/4+c_degL_u*(pi/180))
+		cutter2= (cut_i.transl(0,width*cut_u,0)).rotz(pi/4+c_degL_u*(pi/180))
+		cutterL=cutter1.add(cutter2)
+		cutter3= (cut_i.transl(width*cut_u,0,0)).rotz(-pi/4-c_degR_u*(pi/180))
+		cutter4= (cut_i.transl(0,width*cut_u,0)).rotz(-pi/4-c_degR_u*(pi/180))
+		cutterR=cutter3.add(cutter4)
+		circ=cylinder(width, thickness)
+		Lend=circ.sub(cutterL)
+		Rend=circ.sub(cutterR)
+		if c_degL_u>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL_u<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL_u==0{addL=universe().inverse()}
+		if c_degR_u>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR_u<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR_u==0{addR=universe().inverse()}		
+		left = (addL.add(Lend)).transl(-(L1-W1)/2, 0, 0).transl(0,0,bottom)
+		right = (addR.add(Rend)).transl((L1-W1)/2, 0, 0).transl(0,0,bottom)
+		////////////////////////////////////////
+		BLisland = recta.add(left).add(right)		
+		BLisland = BLisland.rotz(rot225)	
+		BLisland = BLisland.transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),0)
+
+
+TLislandsB = (TLisland.repeat(hex2,hex2,0)).transl(-xLoff/2,-yLoff/2,0)
+defregion(5,TLislandsB)
+TRislandsB = (TRisland.repeat(hex2,hex2,0)).transl(-xLoff/2,-yLoff/2,0)
+defregion(6,TRislandsB)
+BRislandsB = (BRisland.repeat(hex2,hex2,0)).transl(-xLoff/2,-yLoff/2,0)
+defregion(7,BRislandsB)
+BLislandsB = (BLisland.repeat(hex2,hex2,0)).transl(-xLoff/2,-yLoff/2,0)
+defregion(8,BLislandsB)
+
+	}
+	
+sample=(TRislands).add(BRislands).add(TLislands).add(BLislands).add(TRislandsB).add(BRislandsB).add(TLislandsB).add(BLislandsB)
+setgeom(sample)	
+print("SUCCESS")	
+
+}
+
+
+
+
+
+geomname:=sprintf("%03.0fnm_geom.png",abs(param))
+snapshotas(geom, geomname)
+OutputFormat = OVF2_BINARY
+geomname=sprintf("geom.ovf")
+saveas(geom,geomname)
+OutputFormat = OVF1_TEXT	
+
+for i:=5;i<=8;i++{
+	Aex.setregion(i,ex_stiff*1e-12)
+	Msat.setregion(i,Msati*1e3)
+	alpha.setregion(i,damping)
+}
+
+if ASI_underlayer==0{	
+for i :=1 ; i<=4; i++{
+ext_ScaleExchange(i, 10, ex_scale)
+		}
+}
+if ASI_underlayer==1{	
+	for i :=1 ; i<=4; i++{
+ext_ScaleExchange(i, i+4, ex_scale)
+		}	
+}
+
+
+
+	
+}
+
+//SET MAGNETISATION
+if ASI_geometry==1{
+//TOPLEFT
+print("SET MAG")
+if M1==1{m.setregion(1, uniform(1, -1, 0))    //in
+}
+if M1==0{m.setregion(1, uniform(-1, 1, 0))    //out
+}
+if M1==7{m.setregion(1, randommag())    //out
+}
+if M1==2{m.setregion(1,Vortex(1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==3{m.setregion(1,Vortex(-1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==4{m.setregion(1,Vortex(1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==5{m.setregion(1,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+//TOPRIGHT
+if M2==1{m.setregion(2, uniform(-1, -1, 0))   //in
+}
+if M2==0{m.setregion(2, uniform(1, 1, 0))     //out
+}
+if M2==7{m.setregion(2, randommag())    //out
+}
+if M2==2{m.setregion(2,Vortex(1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==3{m.setregion(2,Vortex(-1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==4{m.setregion(2,Vortex(1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==5{m.setregion(2,Vortex(-1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+//BOTTOMRIGHT
+if M3==1{m.setregion(3, uniform(-1, 1, 0))    //in
+}
+if M3==0{m.setregion(3, uniform(1, -1, 0))    //out
+}
+if M3==7{m.setregion(3, randommag())    //out
+}
+if M3==2{m.setregion(3,Vortex(1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==3{m.setregion(3,Vortex(-1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==4{m.setregion(3,Vortex(1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==5{m.setregion(3,Vortex(-1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+//BOTTOMLEFT
+if M4==1{m.setregion(4, uniform(1, 1, 0))    //in
+}
+if M4==0{m.setregion(4, uniform(-1, -1, 0))    //out
+}
+if M4==7{m.setregion(4, randommag())    //out
+}
+if M4==2{m.setregion(4,Vortex(1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==3{m.setregion(4,Vortex(-1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==4{m.setregion(4,Vortex(1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==5{m.setregion(4,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+}
+
+
+
+if ASI_underlayer==1{
+	
+//TOPLEFT UL
+if M1U==1{m.setregion(5, uniform(1, -1, 0))    //in
+}
+if M1U==0{
+m.setregion(5, uniform(-1, 1, 0))    //out
+}
+if M1U==7{m.setregion(5, randommag())    //out
+}
+if M1U==2{m.setregion(5,Vortex(1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==3{m.setregion(5,Vortex(-1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==4{m.setregion(5,Vortex(1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==5{m.setregion(5,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+//TOPRIGHT UL
+if M2U==1{m.setregion(6, uniform(-1, -1, 0))   //in
+}
+if M2U==0{m.setregion(6, uniform(1, 1, 0))     //out
+}
+if M2U==7{m.setregion(6, randommag())    //out
+}
+if M2U==2{m.setregion(6,Vortex(1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==3{m.setregion(6,Vortex(-1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==4{m.setregion(6,Vortex(1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==5{m.setregion(6,Vortex(-1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+//BOTTOMRIGHT UL
+if M3U==1{m.setregion(7, uniform(-1, 1, 0))    //in
+}
+if M3U==0{m.setregion(7, uniform(1, -1, 0))    //out
+}
+if M3U==7{m.setregion(7, randommag())    //out
+}
+if M3U==2{m.setregion(7,Vortex(1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==3{m.setregion(7,Vortex(-1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==4{m.setregion(7,Vortex(1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==5{m.setregion(7,Vortex(-1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+//BOTTOMLEFT UL
+if M4U==1{m.setregion(8, uniform(1, 1, 0))    //in
+}
+if M4U==0{m.setregion(8, uniform(-1, -1, 0))    //out
+}
+if M4U==7{m.setregion(8, randommag())    //out
+}
+if M4U==2{m.setregion(8,Vortex(1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==3{m.setregion(8,Vortex(-1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==4{m.setregion(8,Vortex(1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==5{m.setregion(8,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}	
+}
+
+
+
+
+
+//global M
+m.setregion(10, uniform(r*(cos(m_theta)*cos(m_phi)), r*(sin(m_theta)*cos(m_phi)), r*sin(m_phi)))
+
+
+//ADD CPW
+if antenni>0{
+defregion(11,cuboid(w_wg_x,w_wg_y,t_UL).transl(-a_wg/2-w_wg_x/2,0,0).transl(0,0,bottom))
+defregion(22,cuboid(w_wg_x,w_wg_y,t_UL).transl(a_wg/2+w_wg_x/2,0,0).transl(0,0,bottom))
+	Msat.setregion(11,Msati*1e3)
+	alpha.setregion(11,damping)
+	Aex.setregion(11,ex_stiff*1e-12)
+	Msat.setregion(22,Msati*1e3)
+	alpha.setregion(22,damping)
+	Aex.setregion(22,ex_stiff*1e-12)
+}
+if antenna>0{
+	if t_UL>0{
+	defregion(11,cuboid(w_wg_x,w_wg_y,t_UL).transl(0,0,bottom))
+	}
+	if t_UL==0{
+		defregion(11,cuboid(w_wg_x,w_wg_y,Nz*cz))
+	}
+	Msat.setregion(11,Msati_UL*1e3)
+	alpha.setregion(11,damping_UL)
+	Aex.setregion(11,ex_stiff_UL*1e-12)
+}
+
+}
+
+//  .dP"Y8    db    Yb    dP 888888 8888b.       dP""b8 888888  dP"Yb  8b    d8 888888 888888 88""Yb Yb  dP 
+//  `Ybo."   dPYb    Yb  dP  88__    8I  Yb     dP   `" 88__   dP   Yb 88b  d88 88__     88   88__dP  YbdP  
+//  o.`Y8b  dP__Yb    YbdP   88""    8I  dY     Yb  "88 88""   Yb   dP 88YbdP88 88""     88   88"Yb    8P   
+//  8bodP' dP""""Yb    YP    888888 8888Y"       YboodP 888888  YbodP  88 YY 88 888888   88   88  Yb  dP    
+
+if ASI_saved_geom==1{
+print("USING SAVED GEOMETRY")	
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//SET MESH
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+half:=(Nz/2)*cz
+bottom= -half + t_UL/2
+top= half - thickness/2
+
+if Fcropx > 0{
+crop_x1=trunc(Nx/2-Fcropx*Nx/2); crop_x2=trunc(Nx/2+Fcropx*Nx/2);
+}
+if Fcropy > 0{
+crop_y1=trunc(Ny/2-Fcropy*Ny/2); crop_y2=trunc(Ny/2+Fcropy*Ny/2);
+}
+if Fcropz > 0{
+crop_z1=trunc(Nz/2-Fcropz*Nz/2); crop_z2=trunc(Nz/2+Fcropz*Nz/2);
+}
+
+
+	
+
+
+Nxc=crop_x2-crop_x1
+Nyc=crop_y2-crop_y1
+Nzc=crop_z2-crop_z1
+
+
+//MATERIAL PARAMETERS
+//Msat = Msati*1e3
+//Aex = ex_stiff*1e-12
+//alpha = damping
+EdgeSmooth = 8	
+
+Msat.setregion(0,0)
+Aex.setregion(0,0)
+
+
+if demagOFF==1{
+EnableDemag = false
+}
+
+
+
+xcentre:=(sqrt(2)*hex)/2
+xshift:=-(Nx/2)*cx+xcentre//-(Nx/4)*c
+yshift:=-(Ny/2)*cy+xcentre
+	
+	
+//rotation in degrees
+rot45:=45*deg
+	
+
+for i:=1;i<=4;i++{
+	Aex.setregion(i,ex_stiff*1e-12)
+	Msat.setregion(i,Msati*1e3)
+	alpha.setregion(i,damping)
+}
+
+if t_UL==0{		
+	Aex.setregion(10,ex_stiff*1e-12)
+	Msat.setregion(10,Msati*1e3)
+	alpha.setregion(10,damping)
+}
+
+
+if t_UL>0{	
+if ASI_underlayer==0{	
+	Aex.setregion(10,ex_stiff_UL*1e-12)
+	Msat.setregion(10,Msati_UL*1e3)
+	alpha.setregion(10,damping_UL)
+}
+if ASI_underlayer==0{
+for i:=5;i<=8;i++{
+	Aex.setregion(i,ex_stiff_UL*1e-12)
+	Msat.setregion(i,Msati_UL*1e3)
+	alpha.setregion(i,damping_UL)
+}
+}
+}
+
+
+
+if ASI_underlayer==0{	
+for i :=1 ; i<=4; i++{
+ext_ScaleExchange(i, 10, ex_scale)
+		}
+}
+if ASI_underlayer==1{	
+	for i :=1 ; i<=4; i++{
+ext_ScaleExchange(i, i+4, ex_scale)
+		}	
+}
+
+
+
+//SET MAGNETISATION
+if ASI_geometry==1{
+//TOPLEFT
+if M1==1{m.setregion(1, uniform(1, -1, 0))    //in
+}
+if M1==0{m.setregion(1, uniform(-1, 1, 0))    //out
+}
+if M1==7{m.setregion(1, randommag())    //out
+}
+if M1==2{m.setregion(1,Vortex(1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==3{m.setregion(1,Vortex(-1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==4{m.setregion(1,Vortex(1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==5{m.setregion(1,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+//TOPRIGHT
+if M2==1{m.setregion(2, uniform(-1, -1, 0))   //in
+}
+if M2==0{m.setregion(2, uniform(1, 1, 0))     //out
+}
+if M2==7{m.setregion(2, randommag())    //out
+}
+if M2==2{m.setregion(2,Vortex(1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==3{m.setregion(2,Vortex(-1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==4{m.setregion(2,Vortex(1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==5{m.setregion(2,Vortex(-1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+//BOTTOMRIGHT
+if M3==1{m.setregion(3, uniform(-1, 1, 0))    //in
+}
+if M3==0{m.setregion(3, uniform(1, -1, 0))    //out
+}
+if M3==7{m.setregion(3, randommag())    //out
+}
+if M3==2{m.setregion(3,Vortex(1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==3{m.setregion(3,Vortex(-1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==4{m.setregion(3,Vortex(1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==5{m.setregion(3,Vortex(-1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+//BOTTOMLEFT
+if M4==1{m.setregion(4, uniform(1, 1, 0))    //in
+}
+if M4==0{m.setregion(4, uniform(-1, -1, 0))    //out
+}
+if M4==7{m.setregion(4, randommag())    //out
+}
+if M4==2{m.setregion(4,Vortex(1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==3{m.setregion(4,Vortex(-1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==4{m.setregion(4,Vortex(1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==5{m.setregion(4,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+}
+
+
+
+if ASI_underlayer==1{
+	
+//TOPLEFT UL
+if M1U==1{m.setregion(5, uniform(1, -1, 0))    //in
+}
+if M1U==0{
+m.setregion(5, uniform(-1, 1, 0))    //out
+}
+if M1U==7{m.setregion(5, randommag())    //out
+}
+if M1U==2{m.setregion(5,Vortex(1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==3{m.setregion(5,Vortex(-1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==4{m.setregion(5,Vortex(1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==5{m.setregion(5,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+//TOPRIGHT UL
+if M2U==1{m.setregion(6, uniform(-1, -1, 0))   //in
+}
+if M2U==0{m.setregion(6, uniform(1, 1, 0))     //out
+}
+if M2U==7{m.setregion(6, randommag())    //out
+}
+if M2U==2{m.setregion(6,Vortex(1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==3{m.setregion(6,Vortex(-1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==4{m.setregion(6,Vortex(1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==5{m.setregion(6,Vortex(-1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+//BOTTOMRIGHT UL
+if M3U==1{m.setregion(7, uniform(-1, 1, 0))    //in
+}
+if M3U==0{m.setregion(7, uniform(1, -1, 0))    //out
+}
+if M3U==7{m.setregion(7, randommag())    //out
+}
+if M3U==2{m.setregion(7,Vortex(1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==3{m.setregion(7,Vortex(-1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==4{m.setregion(7,Vortex(1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==5{m.setregion(7,Vortex(-1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+//BOTTOMLEFT UL
+if M4U==1{m.setregion(8, uniform(1, 1, 0))    //in
+}
+if M4U==0{m.setregion(8, uniform(-1, -1, 0))    //out
+}
+if M4U==7{m.setregion(8, randommag())    //out
+}
+if M4U==2{m.setregion(8,Vortex(1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==3{m.setregion(8,Vortex(-1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==4{m.setregion(8,Vortex(1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==5{m.setregion(8,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}	
+}
+
+//global M
+m.setregion(10, uniform(r*(cos(m_theta)*cos(m_phi)), r*(sin(m_theta)*cos(m_phi)), r*sin(m_phi)))
+
+
+//ADD CPW
+if antenni>0{
+	Msat.setregion(11,Msati*1e3)
+	alpha.setregion(11,damping)
+	Aex.setregion(11,ex_stiff*1e-12)
+	Msat.setregion(22,Msati*1e3)
+	alpha.setregion(22,damping)
+	Aex.setregion(22,ex_stiff*1e-12)
+}
+if antenna>0{
+	Msat.setregion(11,Msati_UL*1e3)
+	alpha.setregion(11,damping_UL)
+	Aex.setregion(11,ex_stiff_UL*1e-12)
+}
+
+snapshot(regions)
+
+
+//DECLARE TABLES
+if tables==1{
+//Number of cells
+TableAddVar(Nxc, "Nx", "")
+TableAddVar(Nyc, "Ny", "")
+TableAddVar(Nzc, "Nz", "")
+//Cell size
+TableAddVar(cx, "cell size x", "nm")
+TableAddVar(cy, "cell size y", "nm")
+TableAddVar(cz, "cell size z", "nm")
+//Material properties
+TableAddVar(Msati, "Msat", "kA/m")
+TableAddVar(damping, "damping", "")
+TableAddVar(ex_stiff, "Aex", "J")
+//Global magnetisation
+TableAddVar(m_theta*(180/pi), "m_theta", "in-plane")
+TableAddVar(m_phi*(180/pi), "m_phi", "out-of-plane")
+//Field magnitude and direction
+TableAddVar(H, "field", "oe")
+TableAddVar(H_theta*(180/pi), "H_theta", "in-plane")
+TableAddVar(H_phi*(180/pi), "H_phi", "out-of-plane")
+//Excitation requency and amplitude
+TableAddVar(f*1e-9, "frequency", "GHz")
+TableAddVar(Amp/10000, "amplitude", "oe")
+//Output quantities
+tableAdd(B_demag) 
+tableAdd(E_demag) 
+tableAdd(E_total) 
+tableAdd(B_ext) 
+tableadd(m.region(10))
+tableadd(m.region(1))
+tableadd(m.region(2))	
+tableadd(m.region(3))	
+tableadd(m.region(4))
+if ASI_underlayer==1{
+tableadd(m.region(5))
+tableadd(m.region(6))	
+tableadd(m.region(7))	
+tableadd(m.region(8))
+}
+tableadd(m.region(11))	
+tableadd(m.region(22))
+TableAddVar(param, "parameter", "")
+}
+
+
+}
+
+//  88 .dP"Y8 88        db    88b 88 8888b.      88        db    Yb  dP 888888 88""Yb      dP""b8 888888  dP"Yb  8b    d8 
+//  88 `Ybo." 88       dPYb   88Yb88  8I  Yb     88       dPYb    YbdP  88__   88__dP     dP   `" 88__   dP   Yb 88b  d88 
+//  88 o.`Y8b 88  .o  dP__Yb  88 Y88  8I  dY     88  .o  dP__Yb    8P   88""   88"Yb      Yb  "88 88""   Yb   dP 88YbdP88 
+//  88 8bodP' 88ood8 dP""""Yb 88  Y8 8888Y"      88ood8 dP""""Yb  dP    888888 88  Yb      YboodP 888888  YbodP  88 YY 88 
+
+if island_geometry==1{
+print("ISLANDS GEOMETRY")
+hex2:=(2*hex)/sqrt(2)	
+
+LX2:=ii*(L1+0) //todo: New variable to define the mesh but not for multiple island translations.
+LX:=ii*(L1+xgap); //todo: Briefly changed xgap to 0
+if ASI_underlayer==1 && L1U>L1{
+LX=ii*(L1U+xgap);
+}
+LY2:=jj*(W2+0) //todo: New variable to define mesh that doesn't depend on xgap and ygap.
+LY:=jj*(W1+ygap); //todo: Briefly changed ygap to 0
+if ASI_underlayer==1 && W1U>W1{
+LY=jj*(W1U+ygap);
+}
+
+//CALCULATE MESH
+Nx = trunc(LX2/ cx) + 8 //todo: Added extra space for the offset.
+
+if Nx>1 && remainder(Nx,2) != 0{
+Nx = Nx+1
+}
+Ny = trunc(LY2/ cy) + 8  //todo: Added extra space for the offset
+if Ny>1 && remainder(Ny,2) != 0{
+Ny = Ny+1
+}
+Nz = trunc(thickness/ cz)
+if Nz>1 && remainder(Nz,2) != 0{
+Nz = Nz+1
+}	
+if t_UL>0{	
+Nz = trunc(((thickness + t_UL + g_UL)/cz)+0.1)
+
+}
+
+
+half:=(Nz/2)*cz
+bottom= -half + t_UL/2
+top= half - thickness/2
+
+print(top)
+print(half)
+print(bottom)
+
+if Fcropx > 0{
+crop_x1=trunc(Nx/2-Fcropx*Nx/2); crop_x2=trunc(Nx/2+Fcropx*Nx/2);
+}
+if Fcropy > 0{
+crop_y1=trunc(Ny/2-Fcropy*Ny/2); crop_y2=trunc(Ny/2+Fcropy*Ny/2);
+}
+if Fcropz > 0{
+crop_z1=trunc(Nz/2-Fcropz*Nz/2); crop_z2=trunc(Nz/2+Fcropz*Nz/2);
+}
+
+//DECLARE TABLES
+if tables==1{
+
+//Number of cells
+TableAddVar(Nxc, "Nx", "")
+TableAddVar(Nyc, "Ny", "")
+TableAddVar(Nzc, "Nz", "")
+//Cell size
+TableAddVar(cx, "cell size x", "nm")
+TableAddVar(cy, "cell size y", "nm")
+TableAddVar(cz, "cell size z", "nm")
+//Material properties
+TableAddVar(Msati, "Msat", "kA/m")
+TableAddVar(damping, "damping", "")
+TableAddVar(ex_stiff, "Aex", "J")
+//Global magnetisation
+TableAddVar(m_theta*(180/pi), "m_theta", "in-plane")
+TableAddVar(m_phi*(180/pi), "m_phi", "out-of-plane")
+//Field magnitude and direction
+TableAddVar(H, "field", "oe")
+TableAddVar(H_theta*(180/pi), "H_theta", "in-plane")
+TableAddVar(H_phi*(180/pi), "H_phi", "out-of-plane")
+//Excitation requency and amplitude
+TableAddVar(f*1e-9, "frequency", "GHz")
+TableAddVar(Amp/10000, "amplitude", "oe")
+//Output quantities
+tableAdd(B_demag) 
+tableAdd(E_demag) 
+tableAdd(E_total) 
+tableAdd(B_ext) 
+tableadd(m.region(10))
+tableadd(m.region(1))
+tableadd(m.region(2))	
+tableadd(m.region(3))	
+tableadd(m.region(4))	
+if ASI_underlayer==1{
+tableadd(m.region(5))
+tableadd(m.region(6))	
+tableadd(m.region(7))	
+tableadd(m.region(8))
+}
+tableadd(m.region(11))	
+tableadd(m.region(22))
+TableAddVar(param, "parameter", "")
+}
+	
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//SET MESH
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+setgridsize(Nx, Ny, Nz)
+setcellsize(cx, cy, cz)
+if PBCs==1{
+setPBC(PX, PY, PZ)
+}	
+
+Nxc=crop_x2-crop_x1
+Nyc=crop_y2-crop_y1
+Nzc=crop_z2-crop_z1
+
+
+//MATERIAL PARAMETERS
+Msat = Msati*1e3
+Aex = ex_stiff*1e-12
+alpha = damping
+EdgeSmooth = 8	
+if demagOFF==1{
+EnableDemag = false
+}
+
+
+xcentre:=(sqrt(2)*hex)/2
+xshift:=-(Nx/2)*cx+xcentre//-(Nx/4)*c
+yshift:=-(Ny/2)*cy+xcentre
+	
+	
+//Initilialise Paramters for Geometry
+TLisland := universe().sub(universe())
+TLislands := universe().sub(universe())
+TLislandT := universe().sub(universe())
+TLislandsB:= universe().sub(universe())
+sample := universe().sub(universe())
+recta := universe().sub(universe())
+left:=universe().sub(universe())
+right:=universe().sub(universe())
+island:=universe().sub(universe())
+islands:=universe().sub(universe())
+//rotation in degrees
+rot45:=45*deg
+
+
+	
+
+	if Lvar>0||Wvar>0{
+print("ISLAND QUENCHED")		
+//TOP LEFT NANOWIRE
+//Initialise TL nanowires
+for i:=0; i<=ii-1; i++{
+	for j:=0; j<=jj-1; j++{	
+		randomL:=rand();length:=L1+Lvar*randomL
+		randomW:=rand();width:=W1+Wvar*randomW
+		recta := cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,top)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut, width*cut,thickness)
+		cutter1:= (cut_i.transl(-width*cut,0,0)).rotz(pi/4+c_degL*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut,0)).rotz(pi/4+c_degL*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut,0,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL==0{addL=universe().inverse()}
+		if c_degR>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR==0{addR=universe().inverse()}		
+		left := (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,top)
+		right := (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,top)
+		//////////////////////////////////////
+		island := recta.add(left).add(right)	
+		TLislandT = TLislandT.add(island.transl(LX*i,LY*j,0))
+	}
+}
+
+TLislands = TLislandT.transl(xshift,yshift,0)
+defregion(1,TLislands)
+
+
+
+	}
+
+	if Lvar==0&&Wvar==0{
+	print("ISLAND HOMOGENEOUS")
+//Initialise TL nanowires
+		recta := cuboid(L1-W1, W1, thickness).transl(0,0,0).transl(0,0,top)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(W1*cut, W1*cut,thickness)
+		cutter1:= (cut_i.transl(-W1*cut,0,0)).rotz(pi/4+c_degL*(pi/180))
+		cutter2:= (cut_i.transl(0,W1*cut,0)).rotz(pi/4+c_degL*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(W1*cut,0,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutter4:= (cut_i.transl(0,W1*cut,0)).rotz(-pi/4-c_degR*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(W1, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL==0{addL=universe().inverse()}
+		if c_degR>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR==0{addR=universe().inverse()}
+		///////////////////////////////////////////////////
+		left := (addL.add(Lend)).transl(-(L1-W1)/2, 0, 0).transl(0,0,top)
+		right := (addR.add(Rend)).transl((L1-W1)/2, 0, 0).transl(0,0,top)
+		TLisland = recta.add(left).add(right)
+
+TLislands = (TLisland.repeat(LX,LY,0)).transl(xLoff/2,yLoff/2,0)
+defregion(1,TLislands)
+
+
+	}
+
+
+	Aex.setregion(1,ex_stiff*1e-12)
+	Msat.setregion(1,Msati*1e3)
+	alpha.setregion(1,damping)
+
+
+
+
+
+
+
+if t_UL==0{		
+print("SI LAYER")
+sample=TLislands
+setgeom(sample)
+
+geomname:=sprintf("%03.0fnm_geom.png",abs(param))
+	Aex.setregion(10,ex_stiff*1e-12)
+	Msat.setregion(10,Msati*1e3)
+	alpha.setregion(10,damping)
+snapshotas(geom, geomname)	
+OutputFormat = OVF2_BINARY
+geomname=sprintf("geom.ovf")
+saveas(geom,geomname)
+OutputFormat = OVF1_TEXT
+}
+
+
+if t_UL>0{		
+print("BILAYER")
+if ASI_underlayer==0{
+print("CONTINUOUS UNDERLAYER")
+UL:=cuboid(l_UL,w_UL,t_UL).transl(xo_U,yo_U,bottom)
+defregion(10,UL)
+sample=TLislands.add(UL)
+setgeom(sample)
+Aex.setregion(10,ex_stiff_UL*1e-12)
+Msat.setregion(10,Msati_UL*1e3)
+alpha.setregion(10,damping_UL)
+}
+
+if ASI_underlayer==1{
+print("BI UNDERLAYER")
+
+	if Lvar>0||Wvar>0{
+print("BI QUENCHED UNDERLAYER")		
+//TOP LEFT NANOWIRE
+//Initialise TL nanowires
+for i:=0; i<=ii-1; i++{
+	for j:=0; j<=jj-1; j++{	
+		randomL:=rand();length:=L1U+Lvar*randomL
+		randomW:=rand();width:=W1U+Wvar*randomW	
+		thickness:=t_UL
+		recta := cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,bottom)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut, width*cut_u,thickness)
+		cutter1:= (cut_i.transl(-width*cut_u,0,0)).rotz(pi/4+c_degL_u*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut_u,0)).rotz(pi/4+c_degL_u*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut_u,0,0)).rotz(-pi/4-c_degR_u*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut_u,0)).rotz(-pi/4-c_degR_u*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL_u>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL_u<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL_u==0{addL=universe().inverse()}
+		if c_degR_u>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR_u<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR_u==0{addR=universe().inverse()}		
+		left := (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,bottom)
+		right := (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,bottom)
+		//////////////////////////////////////
+		island := recta.add(left).add(right)	
+		TLislandT = TLislandT.add(island.transl(LX*i,LY*j,0))
+
+	}
+}
+
+TLislandsB = (TLislandT.transl(xshift,yshift,0)).transl(xLoff/2,yLoff/2,0)
+defregion(5,TLislands)
+
+}
+
+	if Lvar==0&&Wvar==0{
+	print("ASI HOMOGENEOUS UNDERLAYER")
+//Initialise TL nanowires
+		length:=L1U;width:=W1U;thickness:=t_UL		
+		recta := cuboid(length-width, width, thickness).transl(0,0,0).transl(0,0,bottom)
+		///////////////CUTS//////////////
+		cut_i:=cuboid(width*cut, width*cut_u,thickness)
+		cutter1:= (cut_i.transl(-width*cut_u,0,0)).rotz(pi/4+c_degL_u*(pi/180))
+		cutter2:= (cut_i.transl(0,width*cut_u,0)).rotz(pi/4+c_degL_u*(pi/180))
+		cutterL:=cutter1.add(cutter2)
+		cutter3:= (cut_i.transl(width*cut_u,0,0)).rotz(-pi/4-c_degR_u*(pi/180))
+		cutter4:= (cut_i.transl(0,width*cut_u,0)).rotz(-pi/4-c_degR_u*(pi/180))
+		cutterR:=cutter3.add(cutter4)
+		circ:=cylinder(width, thickness)
+		Lend:=circ.sub(cutterL)
+		Rend:=circ.sub(cutterR)
+		if c_degL_u>0{addL=circ.intersect(Lend.inverse()).sub(cutter2)}
+		if c_degL_u<0{addL=circ.intersect(Lend.inverse()).sub(cutter1)}
+		if c_degL_u==0{addL=universe().inverse()}
+		if c_degR_u>=0{addR=circ.intersect(Rend.inverse()).sub(cutter4)}
+		if c_degR_u<0{addR=circ.intersect(Rend.inverse()).sub(cutter3)}
+		if c_degR_u==0{addR=universe().inverse()}		
+		left := (addL.add(Lend)).transl(-(length-width)/2, 0, 0).transl(0,0,bottom)
+		right := (addR.add(Rend)).transl((length-width)/2, 0, 0).transl(0,0,bottom)
+		//////////////////////////////////////
+		TLisland = recta.add(left).add(right)
+
+
+
+TLislandsB = (TLisland.repeat(LX,LY,0)).transl(-xLoff/2,-yLoff/2,0)
+defregion(5,TLislandsB)
+
+
+	}
+	
+sample=TLislands.add(TLislandsB)
+setgeom(sample)	
+print("SUCCESS")	
+
+}
+
+
+
+
+
+geomname:=sprintf("%03.0fnm_geom.png",abs(param))
+snapshotas(geom, geomname)
+OutputFormat = OVF2_BINARY
+geomname=sprintf("geom.ovf")
+saveas(geom,geomname)
+OutputFormat = OVF1_TEXT	
+
+
+	Aex.setregion(5,ex_stiff*1e-12)
+	Msat.setregion(5,Msati*1e3)
+	alpha.setregion(5,damping)
+
+
+if ASI_underlayer==0{	
+ext_ScaleExchange(1, 10, ex_scale)
+}
+
+if ASI_underlayer==1{	
+ext_ScaleExchange(1, 5,ex_scale)
+}
+
+
+print("OI")
+
+
+
+//SET MAGNETISATION
+
+//TOPLEFT
+if M1==1{m.setregion(1, uniform(1, 0, 0))    //in
+}
+if M1==0{m.setregion(1, uniform(-1, 0, 0))    //out
+
+}
+if M1==7{m.setregion(1, randommag())    //out
+}
+if M1==2{m.setregion(1,Vortex(1,1).transl(0,0,top)) 
+}
+if M1==3{m.setregion(1,Vortex(-1,1).transl(0,0,top)) 
+}
+if M1==4{m.setregion(1,Vortex(1,-1).transl(0,0,top)) 
+}
+if M1==5{m.setregion(1,Vortex(-1,-1).transl(0,0,top)) 
+}
+
+
+
+	
+//TOPLEFT UL
+if M1U==1{m.setregion(5, uniform(1, 0, 0))    //in
+}
+if M1U==0{m.setregion(5, uniform(-1, 0, 0))    //out
+}
+if M1U==7{m.setregion(5, randommag())    //out
+}
+if M1U==2{m.setregion(5,Vortex(1,1).transl(0,0,bottom)) 
+}
+if M1U==3{m.setregion(5,Vortex(-1,1).transl(0,0,bottom)) 
+}
+if M1U==4{m.setregion(5,Vortex(1,-1).transl(0,0,bottom)) 
+}
+if M1U==5{m.setregion(5,Vortex(-1,-1).transl(0,0,bottom)) 
+}
+
+
+
+save(m)
+
+
+
+//global M
+m.setregion(10, uniform(r*(cos(m_theta)*cos(m_phi)), r*(sin(m_theta)*cos(m_phi)), r*sin(m_phi)))
+
+
+//ADD CPW
+if antenni>0{
+defregion(11,cuboid(w_wg_x,w_wg_y,t_UL).transl(-a_wg/2-w_wg_x/2,0,0).transl(0,0,bottom))
+defregion(22,cuboid(w_wg_x,w_wg_y,t_UL).transl(a_wg/2+w_wg_x/2,0,0).transl(0,0,bottom))
+	Msat.setregion(11,Msati*1e3)
+	alpha.setregion(11,damping)
+	Aex.setregion(11,ex_stiff*1e-12)
+	Msat.setregion(22,Msati*1e3)
+	alpha.setregion(22,damping)
+	Aex.setregion(22,ex_stiff*1e-12)
+}
+if antenna>0{
+	if t_UL>0{
+	defregion(11,cuboid(w_wg_x,w_wg_y,t_UL).transl(0,0,bottom))
+	}
+	if t_UL==0{
+		defregion(11,cuboid(w_wg_x,w_wg_y,Nz*cz))
+	}
+	Msat.setregion(11,Msati_UL*1e3)
+	alpha.setregion(11,damping_UL)
+	Aex.setregion(11,ex_stiff_UL*1e-12)
+}
+
+
+
+
+
+	
+}
+
+}
+
+}
+
+//  .dP"Y8 88 8b    d8 88   88 88        db    888888 88  dP"Yb  88b 88 .dP"Y8 
+//  `Ybo." 88 88b  d88 88   88 88       dPYb     88   88 dP   Yb 88Yb88 `Ybo." 
+//  o.`Y8b 88 88YbdP88 Y8   8P 88  .o  dP__Yb    88   88 Yb   dP 88 Y88 o.`Y8b 
+//  8bodP' 88 88 YY 88 `YbodP' 88ood8 dP""""Yb   88   88  YbodP  88  Y8 8bodP' 
+
+if 1==1{
+
+//  888888 8b    d8 88""Yb        dP     .dP"Y8 88""Yb 88 88b 88 Yb        dP    db    Yb    dP 888888 .dP"Y8 
+//  88__   88b  d88 88__dP       dP      `Ybo." 88__dP 88 88Yb88  Yb  db  dP    dPYb    Yb  dP  88__   `Ybo." 
+//  88""   88YbdP88 88"Yb       dP       o.`Y8b 88"""  88 88 Y88   YbdPYbdP    dP__Yb    YbdP   88""   o.`Y8b 
+//  88     88 YY 88 88  Yb     dP        8bodP' 88     88 88  Y8    YP  YP    dP""""Yb    YP    888888 8bodP'
+
+if SIM==1{
+		
+print("FMR")	
+	
+//FIELDLOOP
+for H=Hmin; H<=Hmax; H=H+Hstep{
+
+print(param)
+t=0
+//This will restart the field loop
+//B_ext=vector((kmin/10000)*xbias,(kmin/1000)*ybias,0)
+//relax()
+//for B:=kmin+kstep; B<=H; B=B+kstep{
+//B_ext=vector((B/10000)*xbias,(B/1000)*ybias,0)
+//minimize()
+//
+if loadGS==1{
+	print("LOADING GS")
+	loadGS_H:=("")
+	if H>=0{loadGS_H=sprintf("%sp%04doe.ovf",loadGS_dir,H);print(loadGS_H)} 
+	if H<0{loadGS_H=sprintf("%sn%04doe.ovf",loadGS_dir,H);print(loadGS_H)}
+//m=loadfile(loadGS_H)
+}
+
+
+//CALCULATE BIAS FIELDS
+xbias:=(H/10000)*(cos(H_theta)*cos(H_phi))
+ybias:=(H/10000)*(sin(m_theta)*cos(H_phi))
+zbias:=(H/10000)*sin(H_phi)
+
+//APPLY DC FIELD
+B_ext=vector(xbias, ybias, zbias)
+if demagOFF==0{
+relax()
+}
+
+if H<0{
+	if t_UL==0{
+filename:=sprintf("%03d_n%04.0foe.jpg",fcount,abs(H))
+snapshotas(magT,filename)
+
+	}
+if t_UL>0{
+			filename:=sprintf("T_M_%03d_n%04.0foe.jpg",fcount,abs(H))
+			snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)
+			filename=sprintf("T_D_%03d_n%04.0foe.jpg",fcount,abs(H))
+			snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz),filename)
+			filename=sprintf("B_M_%03d_n%04.0foe.jpg",fcount,abs(H))
+			snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
+			filename=sprintf("B_D_%03d_n%04.0foe.jpg",fcount,abs(H))
+			snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
+
+		}
+		
+		if saveGS==1{
+			filename:=sprintf("M_n%04.0foe.ovf",abs(H))
+			saveas(magT,filename)
+			filename=sprintf("D_n%04.0foe.ovf",abs(H))
+			saveas(B_demag,filename)
+					}
+}
+
+
+if H>=0{
+	if t_UL==0{
+filename:=sprintf("%03d_p%04.0foe.jpg",fcount,abs(H))
+snapshotas(magT,filename)
+	}
+if t_UL>0{
+			filename:=sprintf("T_M_%03d_p%04.0foe.jpg",fcount,abs(H))
+			snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)
+			filename=sprintf("T_D_%03d_p%04.0foe.jpg",fcount,abs(H))
+			snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz),filename)
+			filename=sprintf("B_M_%03d_p%04.0foe.jpg",fcount,abs(H))
+			snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
+			filename=sprintf("B_D_%03d_p%04.0foe.jpg",fcount,abs(H))
+			snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
+		}
+		
+		if saveGS==1{
+			filename:=sprintf("M_p%04.0foe.ovf",abs(H))
+			saveas(magT,filename)
+			filename=sprintf("D_p%04.0foe.ovf",abs(H))
+			saveas(B_demag,filename)
+					}
+}
+
+
+
+
+
+
+
+
+
+
+//CHOOSE AC FIELD TYPE
+if homo==1{
+B_ext=vector(xbias-Amp*AC_x*sinc(2*pi*f*(t-pause)),ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)),zbias*sin(H_phi)+Amp*AC_z*sinc(2*pi*f*(t-pause)))
+}
+if antenni==1{
+B_ext.setregion(antenni,vector(xbias-Amp*AC_x*sinc(2*pi*f*(t-pause)),ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)),zbias*sin(H_phi)+Amp*AC_z*sinc(2*pi*f*(t-pause))))
+}
+if antenna==1{
+B_ext.setregion(11,vector(xbias+Amp*AC_x*sinc(2*pi*f*(t-pause)),ybias-Amp*AC_y*sinc(2*pi*f*(t-pause)),zbias+Amp*AC_z*sinc(2*pi*f*(t-pause))))
+}
+if homo==2{
+B_ext=vector(xbias-Amp*AC_x*sin(2*pi*f*(t-pause)),ybias-Amp*AC_y*sin(2*pi*f*(t-pause)),zbias*sin(H_phi)+Amp*AC_z*sin(2*pi*f*(t-pause)))
+}
+
+//SINC MASK
+mask := newVectorMask(Nx, Ny, 1)
+for i:=0; i<Nx; i++{
+    for j:=0; j<Ny; j++{       
+           r := index2coord(i, j, 0)
+           x := r.X()
+            y := r.Y()                       
+            mask.setVector(i,j,0, vector(0,0,sinc(x/(kx_w*cx))*sinc(ky_w*cy) )) // X component is 0 component.
+	}             
+}
+
+if sincpulse==1{
+B_ext.add(mask, Amp*sinc(2*pi*f*(t-pause)))
+}
+
+if fcount==0{
+snapshot(regions)
+OutputFormat = OVF2_BINARY
+region_name:=sprintf("regions_%dby%dby%d",Nx,Ny,Nz)
+saveas(regions,region_name)
+OutputFormat = OVF1_TEXT
+}
+
+
+//will not save ovf files will run for all fields
+if save_ovf==0{
+
+//RUN FMR
+if custom==1{
+print("CUSTOM FILENAMES")
+	for i :=0; i<= tsim; i ++{
+		time_count := i
+		if H<0&&save_ovf==1{		
+		filename:=sprintf("n%03.0foe_%03.0f_M%04d",abs(H),param,i)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		}
+		if H>=0&&save_ovf==1{		
+		filename:=sprintf("p%03.0foe_%03.0f_M%04d",abs(H),param,i)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		}
+		
+		if H<0&&save_demag==1{		
+		filename:=sprintf("n%03.0foe_%03.0f_D%04d",abs(H),param,i)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		}
+		if H>=0&&save_demag==1{		
+		filename:=sprintf("p%03.0foe_%03.0f_D%04d",abs(H),param,i)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		}
+		
+		filename:=sprintf("T_M_%03d_p%04.0foe_%01d.jpg",fcount,abs(H), time_count)
+		snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)
+		filename=sprintf("T_D_%03d_p%04.0foe_%01d.jpg",fcount,abs(H), time_count)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz),filename)
+		filename=sprintf("B_M_%03d_p%04.0foe_%01d.jpg",fcount,abs(H), time_count)
+		snapshotas(Crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
+		filename=sprintf("B_D_%03d_p%04.0foe_%01d.jpg",fcount,abs(H), time_count)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
+
+			loading:=(i/tsim)*100
+			if floor(loading)*1-loading*1==0{
+			load:=sprintf("%03.0foe_%03.0fnm_%03.2f %%", H*1.0,param,loading)
+			print(load)
+			}
+			tablesave()
+			//print(t)
+			run(tstep)			
+	}
+	
+}
+
+//RUN FMR
+if custom==0{
+print("AUTO FILENAMES")
+			autosave(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
+			autosave(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
+			tableAutosave(tstep)
+			run(tot)			
+	}	
+
+
+}
+//will save ovf files for fields selected will not run in time but retains field loop history
+if save_ovf==1{
+print("SKIPPING FMR",(H),"oe")
+
+if H==HS1 || H==HS2 || H==HS3 || H==HS4 || SAVEALL==1{
+print("SAVING OVFS")
+//RUN FMR
+if custom==1{
+print("CUSTOM FILENAMES")
+	for i :=0; i<= tsim; i ++{
+		if H<0&&save_ovf==1{		
+		filename:=sprintf("n%03.0foe_%03.0f_M%04d",abs(H),param,i)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		}
+		if H>=0&&save_ovf==1{		
+		filename:=sprintf("p%03.0foe_%03.0f_M%04d",abs(H),param,i)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		}
+		
+		if H<0&&save_demag==1{		
+		filename:=sprintf("n%03.0foe_%03.0f_D%04d",abs(H),param,i)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		}
+		if H>=0&&save_demag==1{		
+		filename:=sprintf("p%03.0foe_%03.0f_D%04d",abs(H),param,i)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		}
+		
+			loading:=(i/tsim)*100
+			if floor(loading)*1-loading*1==0{
+			load:=sprintf("%03.0foe_%03.0fnm_%03.2f %%", H*1.0,param,loading)
+			print(load)
+			}
+			tablesave()
+			//print(t)
+			run(tstep)			
+	}
+	
+}
+
+//RUN FMR
+if custom==0{
+print("AUTO FILENAMES")
+			autosave(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
+			autosave(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),tstep)
+			tableAutosave(tstep)
+			run(tot)			
+	}	
+
+
+}
+}
+
+fcount=fcount+1
+}
+}
+
+//  88  88 Yb  dP .dP"Y8 888888 888888 88""Yb 888888 .dP"Y8 88 .dP"Y8 
+//  88  88  YbdP  `Ybo."   88   88__   88__dP 88__   `Ybo." 88 `Ybo." 
+//  888888   8P   o.`Y8b   88   88""   88"Yb  88""   o.`Y8b 88 o.`Y8b 
+//  88  88  dP    8bodP'   88   888888 88  Yb 888888 8bodP' 88 8bodP' 
+
+if SIM==2{
+	print("HYSTERESIS")
+
+snapshot(regions)
+OutputFormat = OVF2_BINARY
+region_name:=sprintf("regions_%dby%dby%d",Nx,Ny,Nz)
+saveas(regions,region_name)
+OutputFormat = OVF1_TEXT
+
+	OutputFormat = OVF2_BINARY
+	i:=0
+	loop:=0
+	B_ext = vector(0,0,0)
+	relax()
+for H=0.0; H<=Hmax; H+=Hstep{
+	//CALCULATE BIAS FIELDS
+	xbias:=(H/10000)*(cos(H_theta)*cos(H_phi))
+	ybias:=(H/10000)*(sin(m_theta)*cos(H_phi))
+	zbias:=(H/10000)*sin(H_phi)
+    B_ext = vector(xbias, ybias, zbias)
+    minimize()   // small changes best minimized by minimize()
+//collapse save code
+if 0==0{
+	
+	if t_UL==0{
+		if H<0{		
+		
+		if png==1{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}		
+		
+		    tablesave()
+		}
+		if H>=0{		
+		if png==1{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}		
+		tablesave()
+		}
+		
+			if MFM_lifts==1{
+				for lift:=l_low; lift<=l_hi; lift+=l_res{			
+					MFMLift = lift*1e-9+(Nz-zextra)*cz
+					if H<0{filename:=sprintf("L%03dnm_%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.gif",lift,i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop);snapshotas(MFM, filename)}
+					if H>=0{filename:=sprintf("L%03dnm_%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.gif",lift,i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop);snapshotas(MFM, filename)}
+					}
+				}
+	}
+		
+		if t_UL>0{
+		Mtop=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Dtop=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Mbot=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+		Dbot=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+	}
+		if t_UL>0{
+		if H<0{	
+			if png==1{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		}
+		
+		if H>=0{		
+			if png==1{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		}
+		
+			if MFM_lifts==1{
+				for lift:=l_low; lift<=l_hi; lift+=l_res{			
+					MFMLift = lift*1e-9+(Nz-zextra)*cz
+					if H<0{filename:=sprintf("L%03dnm_%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.gif",lift,i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop);snapshotas(MFM, filename)}
+					if H>=0{filename:=sprintf("L%03dnm_%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.gif",lift,i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop);snapshotas(MFM, filename)}
+					}
+				}
+	}	
+}	
+				
+		i=i+1
+}
+
+for loop:=1; loop<=loops;loop=loop+1{
+
+for H=Hmax; H>=Hmin; H-=Hstep{
+	//CALCULATE BIAS FIELDS
+	xbias:=(H/10000)*(cos(H_theta)*cos(H_phi))
+	ybias:=(H/10000)*(sin(H_theta)*cos(H_phi))
+	zbias:=(H/10000)*sin(H_phi)
+    B_ext = vector(xbias, ybias, zbias)
+    minimize()   // small changes best minimized by minimize()
+    tablesave()
+//collapse save code
+if 1==1{
+		if t_UL==0{
+		if H<0{				
+		if png==1{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+			}		
+		}
+		
+		if H>=0{		
+		if png==1{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+			}
+		}
+			if MFM_lifts==1{
+				for lift:=l_low; lift<=l_hi; lift+=l_res{			
+					MFMLift = lift*1e-9+(Nz-zextra)*cz
+					if H<0{filename:=sprintf("L%03dnm_%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.gif",lift,i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop);snapshotas(MFM, filename)}
+					if H>=0{filename:=sprintf("L%03dnm_%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.gif",lift,i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop);snapshotas(MFM, filename)}
+					}
+				}
+	}
+		
+		if t_UL>0{
+		Mtop=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Dtop=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Mbot=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+		Dbot=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+	}
+		if t_UL>0{
+		if H<0{	
+			if png==1{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dbot,filename)
+		print(filename)		 
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dbot,filename)
+		print(filename)
+			}
+		}
+		
+		if H>=0{		
+			if png==1{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dbot,filename)
+		print(filename)
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dbot,filename)
+		print(filename)
+			}
+		}
+			if MFM_lifts==1{
+				for lift:=l_low; lift<=l_hi; lift+=l_res{			
+					MFMLift = lift*1e-9+(Nz-zextra)*cz
+					if H<0{filename:=sprintf("L%03dnm_%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.gif",lift,i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop);snapshotas(MFM, filename)}
+					if H>=0{filename:=sprintf("L%03dnm_%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.gif",lift,i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop);snapshotas(MFM, filename)}
+					}
+				}
+	}
+		i=i+1
+}
+}
+for H=Hmin; H<=Hmax; H+=Hstep{
+	//CALCULATE BIAS FIELDS
+	xbias:=(H/10000)*(cos(H_theta)*cos(H_phi))
+	ybias:=(H/10000)*(sin(H_theta)*cos(H_phi))
+	zbias:=(H/10000)*sin(H_phi)
+    B_ext = vector(xbias, ybias, zbias)
+    minimize()   // small changes best minimized by minimize()
+    tablesave()
+//collapse save code
+if 2==2{
+		if t_UL==0{
+		if H<0{		
+		
+		if png==1{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}		
+		}
+		if H>=0{		
+		if png==1{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		}
+			if MFM_lifts==1{
+				for lift:=l_low; lift<=l_hi; lift+=l_res{			
+					MFMLift = lift*1e-9+(Nz-zextra)*cz
+					if H<0{filename:=sprintf("L%03dnm_%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.gif",lift,i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop);snapshotas(MFM, filename)}
+					if H>=0{filename:=sprintf("L%03dnm_%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.gif",lift,i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop);snapshotas(MFM, filename)}
+					}
+				}
+	}
+		
+		if t_UL>0{
+		Mtop=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Dtop=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Mbot=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+		Dbot=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+	}
+		if t_UL>0{
+		if H<0{	
+			if png==1{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dbot,filename)
+		print(filename)
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dbot,filename)
+		print(filename)
+			}
+		}
+		
+		if H>=0{		
+			if png==1{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dbot,filename)
+		print(filename)
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dbot,filename)
+		print(filename)
+			}
+		}
+			if MFM_lifts==1{
+				for lift:=l_low; lift<=l_hi; lift+=l_res{			
+					MFMLift = lift*1e-9+(Nz-zextra)*cz
+					if H<0{filename:=sprintf("L%03dnm_%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.gif",lift,i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop);snapshotas(MFM, filename)}
+					if H>=0{filename:=sprintf("L%03dnm_%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.gif",lift,i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop);snapshotas(MFM, filename)}
+					}
+				}
+	}
+		i=i+1
+}
+}	
+	
+
+}
+}
+
+//  88  88 Yb  dP .dP"Y8     88""Yb 88  88    db    .dP"Y8 888888     8b    d8    db    88""Yb 
+//  88  88  YbdP  `Ybo."     88__dP 88  88   dPYb   `Ybo." 88__       88b  d88   dPYb   88__dP 
+//  888888   8P   o.`Y8b     88"""  888888  dP__Yb  o.`Y8b 88""       88YbdP88  dP__Yb  88"""  
+//  88  88  dP    8bodP'     88     88  88 dP""""Yb 8bodP' 888888     88 YY 88 dP""""Yb 88   
+
+if SIM==3{
+	print("PHASE")
+	if t_UL>0{
+		Mtop=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Dtop=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Mbot=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+		Dbot=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+	}
+	
+i:=0
+for H_theta=0; H_theta<=H_theta2; H_theta=H_theta+ph_res{
+	for H_phi=0; H_phi<=H_phi2; H_phi=H_phi+ph_res{
+		for H=0.0; H<=Hmax; H+=Hstep{
+			xbias:=(H/10000)*(cos(H_theta)*cos(H_phi))
+			ybias:=(H/10000)*(sin(H_theta)*cos(H_phi))
+			zbias:=(H/10000)*sin(H_phi)
+			if H==0.0{
+				print("SET MAG")
+				
+				//print(-cos(H_theta)*cos(H_phi))
+				//print(-sin(H_theta)*cos(H_phi))
+				//print(-sin(H_phi))
+				
+				if perp==0{
+				m=uniform(-cos(H_theta)*cos(H_phi),-sin(H_theta)*cos(H_phi),-sin(H_phi))
+				B_ext = vector(-Hmax*cos(H_theta)*cos(H_phi), -Hmax*sin(H_theta)*cos(H_phi), -Hmax*sin(H_phi))
+				}
+				if perp==1{
+				m=uniform(-cos(H_theta+90*deg)*cos(H_phi),-sin(H_theta+90*deg)*cos(H_phi),-sin(H_phi))
+				B_ext = vector(-Hmax*cos(H_theta+90*deg)*cos(H_phi), -Hmax*sin(H_theta+90*deg)*cos(H_phi), -Hmax*sin(H_phi))
+				}
+				
+				relax()
+			}
+			B_ext = vector(xbias, ybias, zbias)
+			minimize()
+			if t_UL==0{
+			filename:=sprintf("M%06d_p%04.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+			snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+			filename=sprintf("D%06d_p%04.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+			snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+			print(filename)
+            tablesave()
+			}
+			
+			
+			if t_UL>0{
+				
+			filename:=sprintf("T_M%06d_p%04.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+			snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)
+			filename=sprintf("T_D%06d_p%04.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+			snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz),filename)
+			print(filename)           
+			filename=sprintf("B_M%06d_p%04.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+			snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
+			filename=sprintf("B_D%06d_p%04.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+			snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)
+			//print(filename)		
+			//snapshot(m)
+		
+			tablesave()
+			}
+			
+		
+			
+			i=i+1
+
+			
+					}
+				}
+			}
+}
+	
+//     db    .dP"Y8 88     .dP"Y8 888888    db    888888 888888      dP""b8 Yb  dP  dP""b8 88     888888 
+//    dPYb   `Ybo." 88     `Ybo."   88     dPYb     88   88__       dP   `"  YbdP  dP   `" 88     88__   
+//   dP__Yb  o.`Y8b 88     o.`Y8b   88    dP__Yb    88   88""       Yb        8P   Yb      88  .o 88""   
+//  dP""""Yb 8bodP' 88     8bodP'   88   dP""""Yb   88   888888      YboodP  dP     YboodP 88ood8 888888 
+
+if SIM==4{
+typ:=0
+count:=1
+Mtot:=0
+
+TableAddVar(M1, "TL", "");TableAddVar(M2, "TR", "");TableAddVar(M3, "BR", "");TableAddVar(M4, "BL", "");
+TableAddVar(M1U, "TLU", "");TableAddVar(M2U, "TRU", "");TableAddVar(M3U, "BRU", "");TableAddVar(M4, "BLU", "");	
+
+for H=Hmin; H<=Hmax; H+=Hstep{
+//CALCULATE BIAS FIELDS
+xbias:=(H/10000)*(cos(H_theta)*cos(H_phi));ybias:=(H/10000)*(sin(H_theta)*cos(H_phi));zbias:=(H/10000)*sin(H_phi)
+print(xbias);print(ybias);print(zbias)
+//APPLY DC FIELD
+B_ext=vector(xbias, ybias, zbias)
+
+//ASI ONLY
+if t_UL==0{
+print("ASI ONLY")
+for i:=M1_i; i<=M1_f;i++{
+	for j:=M2_i; j<=M2_f;j++{
+		for k:=M3_i; k<=M3_f;k++{
+			for l:=M4_i; l<=M4_f;l++{
+			M1=i;M2=j;M3=k;M4=l
+
+
+//SET MAGNETISATION
+if ASI_geometry==1{
+//TOPLEFT
+if M1==1{m.setregion(1, uniform(1, -1, 0))    //in
+}
+if M1==0{m.setregion(1, uniform(-1, 1, 0))    //out
+}
+if M1==7{m.setregion(1, randommag())    //out
+}
+if M1==2{m.setregion(1,Vortex(1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==3{m.setregion(1,Vortex(-1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==4{m.setregion(1,Vortex(1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==5{m.setregion(1,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+//TOPRIGHT
+if M2==1{m.setregion(2, uniform(-1, -1, 0))   //in
+}
+if M2==0{m.setregion(2, uniform(1, 1, 0))     //out
+}
+if M2==7{m.setregion(2, randommag())    //out
+}
+if M2==2{m.setregion(2,Vortex(1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==3{m.setregion(2,Vortex(-1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==4{m.setregion(2,Vortex(1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==5{m.setregion(2,Vortex(-1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+//BOTTOMRIGHT
+if M3==1{m.setregion(3, uniform(-1, 1, 0))    //in
+}
+if M3==0{m.setregion(3, uniform(1, -1, 0))    //out
+}
+if M3==7{m.setregion(3, randommag())    //out
+}
+if M3==2{m.setregion(3,Vortex(1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==3{m.setregion(3,Vortex(-1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==4{m.setregion(3,Vortex(1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==5{m.setregion(3,Vortex(-1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+//BOTTOMLEFT
+if M4==1{m.setregion(4, uniform(1, 1, 0))    //in
+}
+if M4==0{m.setregion(4, uniform(-1, -1, 0))    //out
+}
+if M4==7{m.setregion(4, randommag())    //out
+}
+if M4==2{m.setregion(4,Vortex(1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==3{m.setregion(4,Vortex(-1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==4{m.setregion(4,Vortex(1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==5{m.setregion(4,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+}
+
+
+relax()
+
+//Determine typ
+Mtot=M1+M2+M3+M4
+if Mtot==4 || Mtot==0{
+typ=4
+}
+if Mtot==3 || Mtot==1 {
+typ=3
+}
+if Mtot==2{
+	if M1==0{
+		if M3==1{typ=2}
+		if M3==0{typ=1}
+	}
+	if M1==1{
+		if M3==1{typ=1}
+		if M3==0{typ=2}
+	}
+}
+	
+energy:=E_total.average()
+energy=sqrt(energy*energy)
+print(energy)
+magnitude:=0
+suf:="J"
+
+for energy<100{
+energy=energy*1000
+	magnitude=magnitude+1
+}
+if magnitude==1{suf="mJ"}
+if magnitude==2{suf="uJ"}
+if magnitude==3{suf="nJ"}
+if magnitude==4{suf="pJ"}
+if magnitude==5{suf="fJ"}	
+if magnitude==6{suf="aJ"}
+if magnitude==7{suf="zJ"}
+if magnitude==8{suf="yJ"}
+
+energy=trunc(energy)
+
+dej:="B"
+if M1==1{dej="A"}
+
+if H>=0{filename:=sprintf("M_%0.f%s_%02d_p%03.0foe_TYPE%d%s_%d%d%d%d.ovf",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);print(filename);saveas(m,filename)}
+if H<0{filename:=sprintf("M_%0.f%s_%02d_n%03.0foe_TYPE%d%s_%d%d%d%d.ovf",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);print(filename);saveas(m,filename)}
+
+if H>=0{filename:=sprintf("M_%0.f%s_%02d_p%03.0foe_TYPE%d%s_%d%d%d%d.png",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);print(filename);snapshotas(m,filename)}
+if H<0{filename:=sprintf("M_%0.f%s_%02d_n%03.0foe_TYPE%d%s_%d%d%d%d.png",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);print(filename);snapshotas(m,filename)}
+
+
+if H>=0{filename:=sprintf("D_%0.f%s_%02d_p%03.0foe_TYPE%d%s_%d%d%d%d.ovf",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);print(filename);saveas(B_demag,filename)}
+if H<0{filename:=sprintf("D_%0.f%s_%02d_n%03.0foe_TYPE%d%s_%d%d%d%d.ovf",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);;print(filename);saveas(B_demag,filename)}
+
+
+if H>=0{filename:=sprintf("D_%0.f%s_%02d_p%03.0foe_TYPE%d%s_%d%d%d%d.png",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);print(filename);snapshotas(B_demag,filename)}
+if H<0{filename:=sprintf("D_%0.f%s_%02d_n%03.0foe_TYPE%d%s_%d%d%d%d.png",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);print(filename);snapshotas(B_demag,filename)}
+
+if MFM_png==1{
+
+MFMLift = 10e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L10nm_%0.f%s_%02d_p%03.0foe_TYPE%d%s_%d%d%d%d.png",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L10nm_%0.f%s_%02d_n%03.0foe_TYPE%d%s_%d%d%d%d.png",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);snapshotas(MFM, filename)}
+
+MFMLift = 40e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L40nm_%0.f%s_%02d_p%03.0foe_TYPE%d%s_%d%d%d%d.png",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L40nm_%0.f%s_%02d_n%03.0foe_TYPE%d%s_%d%d%d%d.png",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);snapshotas(MFM, filename)}
+
+MFMLift = 90e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L90nm_%0.f%s_%02d_p%03.0foe_TYPE%d%s_%d%d%d%d.png",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L90nm_%0.f%s_%02d_n%03.0foe_TYPE%d%s_%d%d%d%d.png",energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);snapshotas(MFM, filename)}
+
+}
+
+if MFM_lifts==1{
+for lift:=l_low; lift<=l_hi; lift+=l_res{
+			
+MFMLift = lift*1e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L%03dnm_%0.f%s%02d_p%03.0foe_TYPE%d%s_%d%d%d%d.gif",lift,energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L%03dnm_%0.f%s%02d_n%03.0foe_TYPE%d%s_%d%d%d%d.gif",lift,energy,suf,count,abs(H),typ,dej,M1,M2,M3,M4);snapshotas(MFM, filename)}
+}
+}
+
+tablesave()
+}
+
+count++
+			}
+		}
+	}
+}
+
+//TRLAYER ASI
+if ASI_underlayer==1{
+
+
+	
+for i:=M1_i; i<=M1_f;i++{
+	for j:=M2_i; j<=M2_f;j++{
+		for k:=M3_i; k<=M3_f;k++{
+			for l:=M4_i; l<=M4_f;l++{				
+				for iu:=M1U_i; iu<=M1U_f;iu++{
+					for ju:=M2U_i; ju<=M2U_f;ju++{
+						for ku:=M3U_i; ku<=M3U_f;ku++{
+							for lu:=M4U_i; lu<=M4U_f;lu++{
+								
+			if rel==0{print("UNrel");M1=i;M2=j;M3=k;M4=l;M1U=iu;M2U=ju;M3U=ku;M4U=lu}					//unrelated
+			if rel==1{print("P");M1=i;M2=j;M3=k;M4=l;M1U=M1;M2U=M2;M3U=M3;M4U=M4}					// top bottom P
+			if rel==2{print("AP");M1=i;M2=j;M3=k;M4=l;M1U=iu;M2U=ju;M3U=ku;M4U=lu;
+			if M1==1{M1U=0};if M2==1{M2U=0};if M3==1{M3U=0};if M4==1{M4U=0}	// top bottom AP
+			if M1==0{M1U=1};if M2==0{M2U=1};if M3==0{M3U=1};if M4==0{M4U=1}
+			if M1==2{M1U=3};if M2==2{M2U=3};if M3==2{M3U=3};if M4==2{M4U=3}	// top bottom AP
+			if M1==3{M1U=2};if M2==3{M2U=2};if M3==3{M3U=2};if M4==3{M4U=2}
+			if M1==4{M1U=5};if M2==4{M2U=5};if M3==4{M3U=5};if M4==4{M4U=5}	// top bottom AP
+			if M1==5{M1U=4};if M2==5{M2U=4};if M3==5{M3U=4};if M4==5{M4U=4}}
+
+//SET MAGNETISATION
+if 1==1{
+//TOPLEFT
+if M1==1{m.setregion(1, uniform(1, -1, 0))    //in
+}
+if M1==0{m.setregion(1, uniform(-1, 1, 0))    //out
+}
+if M1==7{m.setregion(1, randommag())    
+}
+if M1==2{m.setregion(1,Vortex(1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==3{m.setregion(1,Vortex(-1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==4{m.setregion(1,Vortex(1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==5{m.setregion(1,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+//TOPRIGHT
+if M2==1{m.setregion(2, uniform(-1, -1, 0))   //in
+}
+if M2==0{m.setregion(2, uniform(1, 1, 0))     //out
+}
+if M2==7{m.setregion(2, randommag())    
+}
+if M2==2{m.setregion(2,Vortex(1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==3{m.setregion(2,Vortex(-1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==4{m.setregion(2,Vortex(1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==5{m.setregion(2,Vortex(-1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+//BOTTOMRIGHT
+if M3==1{m.setregion(3, uniform(-1, 1, 0))    //in
+}
+if M3==0{m.setregion(3, uniform(1, -1, 0))    //out
+}
+if M3==7{m.setregion(3, randommag())    
+}
+if M3==2{m.setregion(3,Vortex(1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==3{m.setregion(3,Vortex(-1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==4{m.setregion(3,Vortex(1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==5{m.setregion(3,Vortex(-1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+//BOTTOMLEFT
+if M4==1{m.setregion(4, uniform(1, 1, 0))    //in
+}
+if M4==0{m.setregion(4, uniform(-1, -1, 0))    //out
+}
+if M4==7{m.setregion(4, randommag())    
+}
+if M4==2{m.setregion(4,Vortex(1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==3{m.setregion(4,Vortex(-1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==4{m.setregion(4,Vortex(1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==5{m.setregion(4,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+	
+//TOPLEFT UL
+if M1U==1{m.setregion(5, uniform(1, -1, 0))    //in
+}
+if M1U==0{
+m.setregion(5, uniform(-1, 1, 0))    //out
+}
+if M1U==7{m.setregion(5, randommag())    
+}
+if M1U==2{m.setregion(5,Vortex(1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==3{m.setregion(5,Vortex(-1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==4{m.setregion(5,Vortex(1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==5{m.setregion(5,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+//TOPRIGHT UL
+if M2U==1{m.setregion(6, uniform(-1, -1, 0))   //in
+}
+if M2U==0{m.setregion(6, uniform(1, 1, 0))     //out
+}
+if M2U==7{m.setregion(6, randommag())    
+}
+if M2U==2{m.setregion(6,Vortex(1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==3{m.setregion(6,Vortex(-1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==4{m.setregion(6,Vortex(1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==5{m.setregion(6,Vortex(-1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+//BOTTOMRIGHT UL
+if M3U==1{m.setregion(7, uniform(-1, 1, 0))    //in
+}
+if M3U==0{m.setregion(7, uniform(1, -1, 0))    //out
+}
+if M3U==7{m.setregion(7, randommag())    
+}
+if M3U==2{m.setregion(7,Vortex(1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==3{m.setregion(7,Vortex(-1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==4{m.setregion(7,Vortex(1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==5{m.setregion(7,Vortex(-1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+//BOTTOMLEFT UL
+if M4U==1{m.setregion(8, uniform(1, 1, 0))    //in
+}
+if M4U==0{m.setregion(8, uniform(-1, -1, 0))    //out
+}
+if M4U==7{m.setregion(8, randommag())    
+}
+if M4U==2{m.setregion(8,Vortex(1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==3{m.setregion(8,Vortex(-1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==4{m.setregion(8,Vortex(1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==5{m.setregion(8,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}	
+		}
+
+//save(m)
+relax()
+
+energy:=E_total.average()
+energy=sqrt(energy*energy)
+print(energy)
+magnitude:=0
+suf:="J"
+
+for energy<100{
+energy=energy*1000
+	magnitude=magnitude+1}
+if magnitude==1{suf="mJ"}
+if magnitude==2{suf="uJ"}
+if magnitude==3{suf="nJ"}
+if magnitude==4{suf="pJ"}
+if magnitude==5{suf="fJ"}	
+if magnitude==6{suf="aJ"}
+if magnitude==7{suf="zJ"}
+if magnitude==8{suf="yJ"}
+
+energy=trunc(energy)
+
+
+if save_ovf==1{
+//top mag
+if H>=0{filename:=sprintf("T_M_%0.f%s_%02d_p%03.0foe_%d%d%d%d_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+if H<0{filename:=sprintf("T_M_%0.f%s_%02d_n%03.0foe_%d%d%d%d_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+
+//top dema
+if H>=0{filename:=sprintf("T_D_%0.f%s_%02d_p%03.0foe_%d%d%d%d_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+if H<0{filename:=sprintf("T_D_%0.f%s_%02d_n%03.0foe_%d%d%d%d_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+
+//bottom mag
+if H>=0{filename:=sprintf("B_M_%0.f%s_%02d_p%03.0foe_%d%d%d%d_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+if H<0{filename:=sprintf("B_M_%0.f%s_%02d_n%03.0foe_%d%d%d%d_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+
+//bottom demag
+if H>=0{filename:=sprintf("B_D_%0.f%s_%02d_p%03.0foe_%d%d%d%d_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+if H<0{filename:=sprintf("B_D_%0.f%s_%02d_n%03.0foe_%d%d%d%d_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+}
+
+if png==1{
+//png
+//top mag
+if H>=0{filename:=sprintf("T_M_%0.f%s_%02d_p%03.0foe_%d%d%d%d_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+if H<0{filename:=sprintf("T_M_%0.f%s_%02d_n%03.0foe_%d%d%d%d_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+
+//top dema
+if H>=0{filename:=sprintf("T_D_%0.f%s_%02d_p%03.0foe_%d%d%d%d_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+if H<0{filename:=sprintf("T_D_%0.f%s_%02d_n%03.0foe_%d%d%d%d_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+
+//bottom mag
+if H>=0{filename:=sprintf("B_M_%0.f%s_%02d_p%03.0foe_%d%d%d%d_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+if H<0{filename:=sprintf("B_M_%0.f%s_%02d_n%03.0foe_%d%d%d%d_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+
+//bottom demag
+if H>=0{filename:=sprintf("B_D_%0.f%s_%02d_p%03.0foe_%d%d%d%d_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+if H<0{filename:=sprintf("B_D_%0.f%s_%02d_n%03.0foe_%d%d%d%d_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+
+}
+
+if MFM_png==1{
+		
+MFMLift = 10e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L10nm_%0.f%s_%02d_p%03.0foe_%d%d%d%d_%d%d%d%d.gif",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L10nm_%0.f%s_%02d_n%03.0foe_%d%d%d%d_%d%d%d%d.gif",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+
+MFMLift = 40e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L40nm_%0.f%s_%02d_p%03.0foe_%d%d%d%d_%d%d%d%d.gif",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L40nm_%0.f%s_%02d_n%03.0foe_%d%d%d%d_%d%d%d%d.gif",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+
+MFMLift = 90e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L90nm_%0.f%s_%02d_p%03.0foe_%d%d%d%d_%d%d%d%d.gif",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L90nm_%0.f%s_%02d_n%03.0foe_%d%d%d%d_%d%d%d%d.gif",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+
+}
+
+if MFM_lifts==1{
+for lift:=l_low; lift<=l_hi; lift+=l_res{
+			
+MFMLift = lift*1e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L%03dnm_%0.f%s_%02d_p%03.0foe_%d%d%d%d_%d%d%d%d.gif",lift,energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L%03dnm_%0.f%s_%02d_n%03.0foe_%d%d%d%d_%d%d%d%d.gif",lift,energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+}
+}
+
+tablesave()
+count++
+print(count)
+
+}}}}}}}}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+//ASI WITH CONTINUOUS UNDERLAYER
+if t_UL>0 && ASI_underlayer==0{
+	print("HEY")
+	
+	
+for i:=M1_i; i<=M1_f;i++{
+	for j:=M2_i; j<=M2_f;j++{
+		for k:=M3_i; k<=M3_f;k++{
+			for l:=M4_i; l<=M4_f;l++{
+			M1=i;M2=j;M3=k;M4=l
+
+	
+//SET MAGNETISATION
+if 1==1{
+//TOPLEFT
+if M1==1{m.setregion(1, uniform(1, -1, 0))    //in
+}
+if M1==0{m.setregion(1, uniform(-1, 1, 0))    //out
+}
+//TOPRIGHT
+if M2==1{m.setregion(2, uniform(-1, -1, 0))   //in
+}
+if M2==0{m.setregion(2, uniform(1, 1, 0))     //out
+}
+
+//BOTTOMRIGHT
+if M3==1{m.setregion(3, uniform(-1, 1, 0))    //in
+}
+if M3==0{m.setregion(3, uniform(1, -1, 0))    //out
+}
+
+//BOTTOMLEFT
+if M4==1{m.setregion(4, uniform(1, 1, 0))    //in
+}
+if M4==0{m.setregion(4, uniform(-1, -1, 0))    //out
+}
+
+m.setregion(10, uniform(r*(cos(m_theta)*cos(m_phi)), r*(sin(m_theta)*cos(m_phi)), r*sin(m_phi)))  
+relax()
+			}
+relax()
+
+energy:=E_total.average()
+energy=sqrt(energy*energy)
+print(energy)
+magnitude:=0
+suf:="J"
+
+for energy<100{
+energy=energy*1000
+	magnitude=magnitude+1
+}
+if magnitude==1{suf="mJ"}
+if magnitude==2{suf="uJ"}
+if magnitude==3{suf="nJ"}
+if magnitude==4{suf="pJ"}
+if magnitude==5{suf="fJ"}	
+if magnitude==6{suf="aJ"}
+if magnitude==7{suf="zJ"}
+if magnitude==8{suf="yJ"}
+
+energy=trunc(energy)
+
+if save_ovf==1{
+//top mag
+if H>=0{filename:=sprintf("T_M_%0.f%s_%04d_p%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+if H<0{filename:=sprintf("T_M_%0.f%s_%04d_n%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+
+//top dema
+if H>=0{filename:=sprintf("T_D_%0.f%s_%04d_p%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+if H<0{filename:=sprintf("T_D_%0.f%s_%04d_n%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+
+//bottom mag
+if H>=0{filename:=sprintf("B_M_%0.f%s_%04d_p%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+if H<0{filename:=sprintf("B_M_%0.f%s_%04d_n%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+
+//bottom demag
+if H>=0{filename:=sprintf("B_D_%0.f%s_%04d_p%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+if H<0{filename:=sprintf("B_D_%0.f%s_%04d_n%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+
+}
+
+if png==1{
+//png
+//top mag
+if H>=0{filename:=sprintf("T_M_%0.f%s_%04d_p%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+if H<0{filename:=sprintf("T_M_%0.f%s_%04d_n%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+
+//top dema
+if H>=0{filename:=sprintf("T_D_%0.f%s_%04d_p%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+if H<0{filename:=sprintf("T_D_%0.f%s_%04d_n%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+
+//bottom mag
+if H>=0{filename:=sprintf("B_M_%0.f%s_%04d_p%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+if H<0{filename:=sprintf("B_M_%0.f%s_%04d_n%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+
+//bottom demag
+if H>=0{filename:=sprintf("B_D_%0.f%s_%04d_p%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+if H<0{filename:=sprintf("B_D_%0.f%s_%04d_n%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+
+}
+
+if save_ovf==2{
+//top mag
+if H>=0{filename:=sprintf("T_M_%0.f%s_%04d_p%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-1, Nz),filename)}
+if H<0{filename:=sprintf("T_M_%0.f%s_%04d_n%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-1, Nz),filename)}
+
+//top dema
+if H>=0{filename:=sprintf("T_D_%0.f%s_%04d_p%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-1, Nz),filename)}
+if H<0{filename:=sprintf("T_D_%0.f%s_%04d_n%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-1, Nz),filename)}
+
+//bottom mag
+if H>=0{filename:=sprintf("B_M_%0.f%s_%04d_p%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)}
+if H<0{filename:=sprintf("B_M_%0.f%s_%04d_n%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)}
+
+//bottom demag
+if H>=0{filename:=sprintf("B_D_%0.f%s_%04d_p%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)}
+if H<0{filename:=sprintf("B_D_%0.f%s_%04d_n%03.0foe_%d%d%d%d.ovf",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)}
+
+}
+
+if png==2{
+//png
+//top mag
+if H>=0{filename:=sprintf("T_M_%0.f%s_%04d_p%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-1, Nz),filename)}
+if H<0{filename:=sprintf("T_M_%0.f%s_%04d_n%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-1, Nz),filename)}
+
+//top dema
+if H>=0{filename:=sprintf("T_D_%0.f%s_%04d_p%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-1, Nz),filename)}
+if H<0{filename:=sprintf("T_D_%0.f%s_%04d_n%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-1, Nz),filename)}
+
+//bottom mag
+if H>=0{filename:=sprintf("B_M_%0.f%s_%04d_p%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)}
+if H<0{filename:=sprintf("B_M_%0.f%s_%04d_n%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)}
+
+//bottom demag
+if H>=0{filename:=sprintf("B_D_%0.f%s_%04d_p%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)}
+if H<0{filename:=sprintf("B_D_%0.f%s_%04d_n%03.0foe_%d%d%d%d.png",energy,suf,count,abs(H),M1,M2,M3,M4)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)}
+
+}
+
+if MFM_png==1{
+			
+MFMLift = 10e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L10nm_%0.f%s_%04d_p%03.0foe_%d%d%d%d_%d%d%d%d.gif",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L10nm_%0.f%s_%04d_n%03.0foe_%d%d%d%d_%d%d%d%d.gif",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+
+MFMLift = 40e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L40nm_%0.f%s_%04d_p%03.0foe_%d%d%d%d_%d%d%d%d.gif",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L40nm_%0.f%s_%04d_n%03.0foe_%d%d%d%d_%d%d%d%d.gif",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+
+MFMLift = 90e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L90nm_%0.f%s_%04d_p%03.0foe_%d%d%d%d_%d%d%d%d.gif",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L90nm_%0.f%s_%04d_n%03.0foe_%d%d%d%d_%d%d%d%d.gif",energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+
+}
+
+if MFM_lifts==1{
+for lift:=l_low; lift<=l_hi; lift+=l_res{
+			
+MFMLift = lift*1e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L%03dnm_%0.f%s_%04d_p%03.0foe_%d%d%d%d_%d%d%d%d.gif",lift,energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L%03dnm_%0.f%s_%04d_n%03.0foe_%d%d%d%d_%d%d%d%d.gif",lift,energy,suf,count,abs(H),M1,M2,M3,M4,M1U,M2U,M3U,M4U);snapshotas(MFM, filename)}
+}
+}
+
+tablesave()
+count++
+
+}}}}
+
+}
+}	
+
+}
+		
+//  88 .dP"Y8 88        db    88b 88 8888b.      .dP"Y8 888888    db    888888 888888      dP""b8 Yb  dP  dP""b8 88     888888 
+//  88 `Ybo." 88       dPYb   88Yb88  8I  Yb     `Ybo."   88     dPYb     88   88__       dP   `"  YbdP  dP   `" 88     88__   
+//  88 o.`Y8b 88  .o  dP__Yb  88 Y88  8I  dY     o.`Y8b   88    dP__Yb    88   88""       Yb        8P   Yb      88  .o 88""   
+//  88 8bodP' 88ood8 dP""""Yb 88  Y8 8888Y"      8bodP'   88   dP""""Yb   88   888888      YboodP  dP     YboodP 88ood8 888888
+
+if SIM==5{
+typ:=0
+count:=1
+Mtot:=0
+
+for H=Hmin; H<=Hmax; H+=Hstep{
+
+for i:=M1_i; i<=M1_f;i++{
+	for j:=M1U_i; j<=M1U_f;j++{
+		M1=i;M1U=j;
+//TOPLEFT
+if M1==1{m.setregion(1, uniform(1, 0, 0))    //in
+}
+if M1==0{m.setregion(1, uniform(-1, 0, 0))    //out
+}
+if M1==7{m.setregion(1, randommag())    //out
+}
+if M1==2{m.setregion(1,Vortex(1,1).transl(0,0,top)) 
+}
+if M1==3{m.setregion(1,Vortex(-1,1).transl(0,0,top)) 
+}
+if M1==4{m.setregion(1,Vortex(1,-1).transl(0,0,top)) 
+}
+if M1==5{m.setregion(1,Vortex(-1,-1).transl(0,0,top)) 
+}
+	
+//TOPLEFT UL
+if M1U==1{m.setregion(5, uniform(1, 0, 0))    //in
+}
+if M1U==0{m.setregion(5, uniform(-1, 0, 0))    //out
+}
+if M1U==7{m.setregion(5, randommag())    //out
+}
+if M1U==2{m.setregion(5,Vortex(1,1).transl(0,0,bottom)) 
+}
+if M1U==3{m.setregion(5,Vortex(-1,1).transl(0,0,bottom)) 
+}
+if M1U==4{m.setregion(5,Vortex(1,-1).transl(0,0,bottom)) 
+}
+if M1U==5{m.setregion(5,Vortex(-1,-1).transl(0,0,bottom)) 
+}		
+
+relax()
+
+energy:=E_total.average()
+magnitude:=0
+suf:="J"
+
+for energy<100{
+energy=energy*1000
+	magnitude=magnitude+1
+}
+if magnitude==1{suf="mJ"}
+if magnitude==2{suf="uJ"}
+if magnitude==3{suf="nJ"}
+if magnitude==4{suf="pJ"}
+if magnitude==5{suf="fJ"}	
+if magnitude==6{suf="aJ"}
+if magnitude==7{suf="zJ"}
+if magnitude==8{suf="yJ"}
+energy=trunc(energy)
+
+
+if save_ovf==1{
+//top mag
+if H>=0{filename:=sprintf("T_M_%0.f%s_%02d_p%03.0foe_%d%d.ovf",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+if H<0{filename:=sprintf("T_M_%0.f%s_%02d_n%03.0foe_%d%d.ovf",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+
+//top dema
+if H>=0{filename:=sprintf("T_D_%0.f%s_%02d_p%03.0foe_%d%d.ovf",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+if H<0{filename:=sprintf("T_D_%0.f%s_%02d_n%03.0foe_%d%d.ovf",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+
+//bottom mag
+if H>=0{filename:=sprintf("B_M_%0.f%s_%02d_p%03.0foe_%d%d.ovf",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+if H<0{filename:=sprintf("B_M_%0.f%s_%02d_n%03.0foe_%d%d.ovf",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+
+//bottom demag
+if H>=0{filename:=sprintf("B_D_%0.f%s_%02d_p%03.0foe_%d%d.ovf",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+if H<0{filename:=sprintf("B_D_%0.f%s_%02d_n%03.0foe_%d%d.ovf",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+}
+
+if png==1{
+//png
+//top mag
+if H>=0{filename:=sprintf("T_M_%0.f%s_%02d_p%03.0foe_%d%d.png",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+if H<0{filename:=sprintf("T_M_%0.f%s_%02d_n%03.0foe_%d%d.png",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+
+//top dema
+if H>=0{filename:=sprintf("T_D_%0.f%s_%02d_p%03.0foe_%d%d.png",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+if H<0{filename:=sprintf("T_D_%0.f%s_%02d_n%03.0foe_%d%d.png",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2,Nz-trunc(thickness/cz+0.1), Nz),filename)}
+
+//bottom mag
+if H>=0{filename:=sprintf("B_M_%0.f%s_%02d_p%03.0foe_%d%d.png",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+if H<0{filename:=sprintf("B_M_%0.f%s_%02d_n%03.0foe_%d%d.png",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+
+//bottom demag
+if H>=0{filename:=sprintf("B_D_%0.f%s_%02d_p%03.0foe_%d%d.png",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+if H<0{filename:=sprintf("B_D_%0.f%s_%02d_n%03.0foe_%d%d.png",energy,suf,count,abs(H),M1,M1U)
+print(filename)
+snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1)),filename)}
+
+}
+
+if MFM_png==1{
+		
+MFMLift = 10e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L10nm_%0.f%s_%02d_p%03.0foe_%d%d.gif",energy,suf,count,abs(H),M1,M1U);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L10nm_%0.f%s_%02d_n%03.0foe_%d%d.gif",energy,suf,count,abs(H),M1,M1U);snapshotas(MFM, filename)}
+
+MFMLift = 40e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L40nm_%0.f%s_%02d_p%03.0foe_%d%d.gif",energy,suf,count,abs(H),M1,M1U);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L40nm_%0.f%s_%02d_n%03.0foe_%d%d.gif",energy,suf,count,abs(H),M1,M1U);snapshotas(MFM, filename)}
+
+MFMLift = 90e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L90nm_%0.f%s_%02d_p%03.0foe_%d%d.gif",energy,suf,count,abs(H),M1,M1U);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L90nm_%0.f%s_%02d_n%03.0foe_%d%d.gif",energy,suf,count,abs(H),M1,M1U);snapshotas(MFM, filename)}
+
+}
+
+
+if MFM_lifts==1{
+for lift:=l_low; lift<=l_hi; lift+=l_res{
+			
+MFMLift = lift*1e-9+(Nz-zextra)*cz
+if H>=0{filename:=sprintf("L%03dnm_%0.f%s_%02d_p%03.0foe_%d%d.gif",lift,energy,suf,count,abs(H),M1,M1U);snapshotas(MFM, filename)}
+if H<0{filename:=sprintf("L%03dnm_%0.f%s_%02d_n%03.0foe_%d%d.gif",lift,energy,suf,count,abs(H),M1,M1U);snapshotas(MFM, filename)}
+}
+}
+
+tablesave()
+count++
+
+}}
+
+
+
+}
+
+}
+		
+//   dP""b8  dP"Yb  888888 88""Yb  dP""b8 88 Yb    dP 888888     888888 88 888888 88     8888b.      888888 88 88b 88 8888b.  888888 88""Yb 
+//  dP   `" dP   Yb 88__   88__dP dP   `" 88  Yb  dP  88__       88__   88 88__   88      8I  Yb     88__   88 88Yb88  8I  Yb 88__   88__dP 
+//  Yb      Yb   dP 88""   88"Yb  Yb      88   YbdP   88""       88""   88 88""   88  .o  8I  dY     88""   88 88 Y88  8I  dY 88""   88"Yb  
+//   YboodP  YbodP  888888 88  Yb  YboodP 88    YP    888888     88     88 888888 88ood8 8888Y"      88     88 88  Y8 8888Y"  888888 88  Yb 
+
+if SIM==6{
+	print("COERCIVE FIELD FINDER")
+	OutputFormat = OVF2_BINARY
+
+//SET MAGNETISATION
+if 1==1{
+if ASI_geometry==1{
+//TOPLEFT
+print("SET MAG")
+if M1==1{m.setregion(1, uniform(1, -1, 0))    //in
+}
+if M1==0{m.setregion(1, uniform(-1, 1, 0))    //out
+}
+if M1==7{m.setregion(1, randommag())    //out
+}
+if M1==2{m.setregion(1,Vortex(1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==3{m.setregion(1,Vortex(-1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==4{m.setregion(1,Vortex(1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==5{m.setregion(1,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+//TOPRIGHT
+if M2==1{m.setregion(2, uniform(-1, -1, 0))   //in
+}
+if M2==0{m.setregion(2, uniform(1, 1, 0))     //out
+}
+if M2==7{m.setregion(2, randommag())    //out
+}
+if M2==2{m.setregion(2,Vortex(1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==3{m.setregion(2,Vortex(-1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==4{m.setregion(2,Vortex(1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==5{m.setregion(2,Vortex(-1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+//BOTTOMRIGHT
+if M3==1{m.setregion(3, uniform(-1, 1, 0))    //in
+}
+if M3==0{m.setregion(3, uniform(1, -1, 0))    //out
+}
+if M3==7{m.setregion(3, randommag())    //out
+}
+if M3==2{m.setregion(3,Vortex(1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==3{m.setregion(3,Vortex(-1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==4{m.setregion(3,Vortex(1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==5{m.setregion(3,Vortex(-1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+//BOTTOMLEFT
+if M4==1{m.setregion(4, uniform(1, 1, 0))    //in
+}
+if M4==0{m.setregion(4, uniform(-1, -1, 0))    //out
+}
+if M4==7{m.setregion(4, randommag())    //out
+}
+if M4==2{m.setregion(4,Vortex(1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==3{m.setregion(4,Vortex(-1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==4{m.setregion(4,Vortex(1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==5{m.setregion(4,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+}
+
+if ASI_underlayer==1{
+	
+//TOPLEFT UL
+if M1U==1{m.setregion(5, uniform(1, -1, 0))    //in
+}
+if M1U==0{
+m.setregion(5, uniform(-1, 1, 0))    //out
+}
+if M1U==7{m.setregion(5, randommag())    //out
+}
+if M1U==2{m.setregion(5,Vortex(1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==3{m.setregion(5,Vortex(-1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==4{m.setregion(5,Vortex(1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==5{m.setregion(5,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+//TOPRIGHT UL
+if M2U==1{m.setregion(6, uniform(-1, -1, 0))   //in
+}
+if M2U==0{m.setregion(6, uniform(1, 1, 0))     //out
+}
+if M2U==7{m.setregion(6, randommag())    //out
+}
+if M2U==2{m.setregion(6,Vortex(1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==3{m.setregion(6,Vortex(-1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==4{m.setregion(6,Vortex(1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==5{m.setregion(6,Vortex(-1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+//BOTTOMRIGHT UL
+if M3U==1{m.setregion(7, uniform(-1, 1, 0))    //in
+}
+if M3U==0{m.setregion(7, uniform(1, -1, 0))    //out
+}
+if M3U==7{m.setregion(7, randommag())    //out
+}
+if M3U==2{m.setregion(7,Vortex(1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==3{m.setregion(7,Vortex(-1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==4{m.setregion(7,Vortex(1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==5{m.setregion(7,Vortex(-1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+//BOTTOMLEFT UL
+if M4U==1{m.setregion(8, uniform(1, 1, 0))    //in
+}
+if M4U==0{m.setregion(8, uniform(-1, -1, 0))    //out
+}
+if M4U==7{m.setregion(8, randommag())    //out
+}
+if M4U==2{m.setregion(8,Vortex(1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==3{m.setregion(8,Vortex(-1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==4{m.setregion(8,Vortex(1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==5{m.setregion(8,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}	
+}
+
+if island_geometry==1{
+	//TOPLEFT
+print("SET VORTEX MAG")
+if M1==1{m.setregion(1, uniform(1, -1, 0))    //in
+}
+if M1==0{m.setregion(1, uniform(-1, 1, 0))    //out
+}
+if M1==7{m.setregion(1, randommag())    //out
+}
+if M1==2{m.setregion(1,Vortex(1,1).transl(0,0,top)) 
+}
+if M1==3{m.setregion(1,Vortex(-1,1).transl(0,0,top)) 
+}
+if M1==4{m.setregion(1,Vortex(1,-1).transl(0,0,top)) 
+}
+if M1==5{m.setregion(1,Vortex(-1,-1).transl(0,0,top)) 
+}
+
+if M1U==1{m.setregion(5, uniform(1, -1, 0))    //in
+}
+if M1U==0{m.setregion(5, uniform(-1, 1, 0))    //out
+}
+if M1U==7{m.setregion(5, randommag())    //out
+}
+if M1U==2{m.setregion(5,Vortex(1,1).transl(0,0,bottom)) 
+}
+if M1U==3{m.setregion(5,Vortex(-1,1).transl(0,0,bottom)) 
+}
+if M1U==4{m.setregion(5,Vortex(1,-1).transl(0,0,bottom)) 
+}
+if M1U==5{m.setregion(5,Vortex(-1,-1).transl(0,0,bottom)) 
+}
+}
+}
+
+i:=0
+	B_ext = vector(0,0,0)
+	relax()
+for H=0.0; H<=Hmax; H+=Hstep{
+	//CALCULATE BIAS FIELDS
+	xbias:=(H/10000)*(cos(H_theta)*cos(H_phi))
+	ybias:=(H/10000)*(sin(m_theta)*cos(H_phi))
+	zbias:=(H/10000)*sin(H_phi)
+    B_ext = vector(xbias, ybias, zbias)
+    minimize()   // small changes best minimized by minimize()
+//collapse save code
+if 0==0{
+	
+	if t_UL==0{
+		if H<0{		
+		
+		if png==1{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}		
+		
+		    tablesave()
+		}
+		if H>=0{		
+		if png==1{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}		
+		tablesave()
+		}
+	}
+		
+		if t_UL>0{
+		Mtop=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Dtop=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Mbot=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+		Dbot=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+	}
+		if t_UL>0{
+		if H<0{	
+			if png==1{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		}
+		
+		if H>=0{		
+			if png==1{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		}
+	}	
+}	
+i=i+1
+}				
+
+//SET MAGNETISATION
+if 1==1{
+if ASI_geometry==1{
+//TOPLEFT
+print("SET MAG")
+if M1==1{m.setregion(1, uniform(1, -1, 0))    //in
+}
+if M1==0{m.setregion(1, uniform(-1, 1, 0))    //out
+}
+if M1==7{m.setregion(1, randommag())    //out
+}
+if M1==2{m.setregion(1,Vortex(1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==3{m.setregion(1,Vortex(-1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==4{m.setregion(1,Vortex(1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M1==5{m.setregion(1,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+//TOPRIGHT
+if M2==1{m.setregion(2, uniform(-1, -1, 0))   //in
+}
+if M2==0{m.setregion(2, uniform(1, 1, 0))     //out
+}
+if M2==7{m.setregion(2, randommag())    //out
+}
+if M2==2{m.setregion(2,Vortex(1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==3{m.setregion(2,Vortex(-1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==4{m.setregion(2,Vortex(1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+if M2==5{m.setregion(2,Vortex(-1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),top)) 
+}
+//BOTTOMRIGHT
+if M3==1{m.setregion(3, uniform(-1, 1, 0))    //in
+}
+if M3==0{m.setregion(3, uniform(1, -1, 0))    //out
+}
+if M3==7{m.setregion(3, randommag())    //out
+}
+if M3==2{m.setregion(3,Vortex(1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==3{m.setregion(3,Vortex(-1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==4{m.setregion(3,Vortex(1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M3==5{m.setregion(3,Vortex(-1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+//BOTTOMLEFT
+if M4==1{m.setregion(4, uniform(1, 1, 0))    //in
+}
+if M4==0{m.setregion(4, uniform(-1, -1, 0))    //out
+}
+if M4==7{m.setregion(4, randommag())    //out
+}
+if M4==2{m.setregion(4,Vortex(1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==3{m.setregion(4,Vortex(-1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==4{m.setregion(4,Vortex(1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+if M4==5{m.setregion(4,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),top)) 
+}
+}
+
+if ASI_underlayer==1{
+	
+//TOPLEFT UL
+if M1U==1{m.setregion(5, uniform(1, -1, 0))    //in
+}
+if M1U==0{
+m.setregion(5, uniform(-1, 1, 0))    //out
+}
+if M1U==7{m.setregion(5, randommag())    //out
+}
+if M1U==2{m.setregion(5,Vortex(1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==3{m.setregion(5,Vortex(-1,1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==4{m.setregion(5,Vortex(1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M1U==5{m.setregion(5,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+//TOPRIGHT UL
+if M2U==1{m.setregion(6, uniform(-1, -1, 0))   //in
+}
+if M2U==0{m.setregion(6, uniform(1, 1, 0))     //out
+}
+if M2U==7{m.setregion(6, randommag())    //out
+}
+if M2U==2{m.setregion(6,Vortex(1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==3{m.setregion(6,Vortex(-1,1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==4{m.setregion(6,Vortex(1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+if M2U==5{m.setregion(6,Vortex(-1,-1).transl((hex/2)/sqrt(2),(hex/2)/sqrt(2),bottom)) 
+}
+//BOTTOMRIGHT UL
+if M3U==1{m.setregion(7, uniform(-1, 1, 0))    //in
+}
+if M3U==0{m.setregion(7, uniform(1, -1, 0))    //out
+}
+if M3U==7{m.setregion(7, randommag())    //out
+}
+if M3U==2{m.setregion(7,Vortex(1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==3{m.setregion(7,Vortex(-1,1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==4{m.setregion(7,Vortex(1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M3U==5{m.setregion(7,Vortex(-1,-1).transl((hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+//BOTTOMLEFT UL
+if M4U==1{m.setregion(8, uniform(1, 1, 0))    //in
+}
+if M4U==0{m.setregion(8, uniform(-1, -1, 0))    //out
+}
+if M4U==7{m.setregion(8, randommag())    //out
+}
+if M4U==2{m.setregion(8,Vortex(1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==3{m.setregion(8,Vortex(-1,1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==4{m.setregion(8,Vortex(1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}
+if M4U==5{m.setregion(8,Vortex(-1,-1).transl(-(hex/2)/sqrt(2),-(hex/2)/sqrt(2),bottom)) 
+}	
+}
+
+if island_geometry==1{
+	//TOPLEFT
+print("SET VORTEX MAG")
+if M1==1{m.setregion(1, uniform(1, -1, 0))    //in
+}
+if M1==0{m.setregion(1, uniform(-1, 1, 0))    //out
+}
+if M1==7{m.setregion(1, randommag())    //out
+}
+if M1==2{m.setregion(1,Vortex(1,1).transl(0,0,top)) 
+}
+if M1==3{m.setregion(1,Vortex(-1,1).transl(0,0,top)) 
+}
+if M1==4{m.setregion(1,Vortex(1,-1).transl(0,0,top)) 
+}
+if M1==5{m.setregion(1,Vortex(-1,-1).transl(0,0,top)) 
+}
+
+if M1U==1{m.setregion(5, uniform(1, -1, 0))    //in
+}
+if M1U==0{m.setregion(5, uniform(-1, 1, 0))    //out
+}
+if M1U==7{m.setregion(5, randommag())    //out
+}
+if M1U==2{m.setregion(5,Vortex(1,1).transl(0,0,bottom)) 
+}
+if M1U==3{m.setregion(5,Vortex(-1,1).transl(0,0,bottom)) 
+}
+if M1U==4{m.setregion(5,Vortex(1,-1).transl(0,0,bottom)) 
+}
+if M1U==5{m.setregion(5,Vortex(-1,-1).transl(0,0,bottom)) 
+}
+}
+}
+
+
+	B_ext = vector(0,0,0)
+	relax()
+for H=0.0; H>=Hmin; H-=Hstep{
+	//CALCULATE BIAS FIELDS
+	xbias:=(H/10000)*(cos(H_theta)*cos(H_phi))
+	ybias:=(H/10000)*(sin(m_theta)*cos(H_phi))
+	zbias:=(H/10000)*sin(H_phi)
+    B_ext = vector(xbias, ybias, zbias)
+    minimize()   // small changes best minimized by minimize()
+//collapse save code
+if 0==0{
+	
+	if t_UL==0{
+		if H<0{		
+		
+		if png==1{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}		
+		
+		    tablesave()
+		}
+		if H>=0{		
+		if png==1{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}		
+		tablesave()
+		}
+	}
+		
+		if t_UL>0{
+		Mtop=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Dtop=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Mbot=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+		Dbot=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+	}
+		if t_UL>0{
+		if H<0{	
+			if png==1{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		}
+		
+		if H>=0{		
+			if png==1{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		snapshotas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi))
+		saveas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		}
+	}	
+}	
+				
+i=i+1
+
+}
+
+}
+	
+//  8b    d8    db     dP""b8 88      dP"Yb   dP"Yb  88""Yb 
+//  88b  d88   dPYb   dP   `" 88     dP   Yb dP   Yb 88__dP 
+//  88YbdP88  dP__Yb  Yb  "88 88  .o Yb   dP Yb   dP 88"""  
+//  88 YY 88 dP""""Yb  YboodP 88ood8  YbodP   YbodP  88  
+
+if SIM==7{
+	print("MAG LOOP")
+	OutputFormat = OVF2_BINARY
+	i:=0
+	loop:=0
+	B_ext = vector(0,0,0)
+	relax()
+	if loops>1{TableAddVar(param, "parameter", "")}
+
+
+for loop:=0; loop<=loops;loop=loop+loopres{
+
+for H=0.0; H<=loop; H+=Hstep{
+	//CALCULATE BIAS FIELDS
+	xbias:=(H/10000)*(cos(H_theta)*cos(H_phi))
+	ybias:=(H/10000)*(sin(m_theta)*cos(H_phi))
+	zbias:=(H/10000)*sin(H_phi)
+    B_ext = vector(xbias, ybias, zbias)
+    minimize()   // small changes best minimized by minimize()
+//collapse save code
+if 0==0{
+	
+	if t_UL==0{
+		if H<0{		
+		
+		if png==1{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}		
+		
+		    tablesave()
+		}
+		if H>=0{		
+		if png==1{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}		
+		tablesave()
+		}
+	}
+		
+		if t_UL>0{
+		Mtop=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Dtop=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Mbot=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+		Dbot=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+	}
+		if t_UL>0{
+		if H<0{	
+			if png==1{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		}
+		
+		if H>=0{		
+			if png==1{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dbot,filename)
+		print(filename)
+		    tablesave()
+			}
+		}
+	}	
+}	
+				
+		i=i+1
+}
+
+for H=loop; H>=-loop; H-=Hstep{
+	//CALCULATE BIAS FIELDS
+	xbias:=(H/10000)*(cos(H_theta)*cos(H_phi))
+	ybias:=(H/10000)*(sin(H_theta)*cos(H_phi))
+	zbias:=(H/10000)*sin(H_phi)
+    B_ext = vector(xbias, ybias, zbias)
+    minimize()   // small changes best minimized by minimize()
+    tablesave()
+//collapse save code
+if 1==1{
+		if t_UL==0{
+		if H<0{				
+		if png==1{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+			}		
+		}
+		
+		if H>=0{		
+		if png==1{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+			}
+		}
+	}
+		
+		if t_UL>0{
+		Mtop=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Dtop=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Mbot=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+		Dbot=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+	}
+		if t_UL>0{
+		if H<0{	
+			if png==1{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dbot,filename)
+		print(filename)		 
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dbot,filename)
+		print(filename)
+			}
+		}
+		
+		if H>=0{		
+			if png==1{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dbot,filename)
+		print(filename)
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dbot,filename)
+		print(filename)
+			}
+		}
+	}
+		i=i+1
+}
+}
+for H=-loop; H<=0.0; H+=Hstep{
+	//CALCULATE BIAS FIELDS
+	xbias:=(H/10000)*(cos(H_theta)*cos(H_phi))
+	ybias:=(H/10000)*(sin(H_theta)*cos(H_phi))
+	zbias:=(H/10000)*sin(H_phi)
+    B_ext = vector(xbias, ybias, zbias)
+    minimize()   // small changes best minimized by minimize()
+    tablesave()
+//collapse save code
+if 2==2{
+		if t_UL==0{
+		if H<0{		
+		
+		if png==1{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}		
+		}
+		if H>=0{		
+		if png==1{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		if png==0{
+		filename:=sprintf("M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		filename=sprintf("D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, crop_z1, crop_z2),filename)
+		print(filename)
+		}
+		}
+	}
+		
+		if t_UL>0{
+		Mtop=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Dtop=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, Nz-trunc(thickness/cz+0.1), Nz)
+		Mbot=crop(magT, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+		Dbot=Crop(B_demag, crop_x1, crop_x2, crop_y1, crop_y2, 0, trunc(t_UL/cz+0.1))
+	}
+		if t_UL>0{
+		if H<0{	
+			if png==1{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dbot,filename)
+		print(filename)
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_n%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dbot,filename)
+		print(filename)
+			}
+		}
+		
+		if H>=0{		
+			if png==1{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.png",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		snapshotas(Dbot,filename)
+		print(filename)
+			}
+		
+			if png==0{
+		filename:=sprintf("T_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mtop,filename)
+		filename=sprintf("T_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dtop,filename)
+		filename=sprintf("B_M%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Mbot,filename)
+		filename=sprintf("B_D%05d_p%03.0foe_th%03.0f_ph%03.0f_%03d.ovf",i,abs(H),H_theta*(180/pi),H_phi*(180/pi),loop)
+		saveas(Dbot,filename)
+		print(filename)
+			}
+		}
+	}
+		i=i+1
+}
+}	
+	
+
+}
+}
+
+
+}

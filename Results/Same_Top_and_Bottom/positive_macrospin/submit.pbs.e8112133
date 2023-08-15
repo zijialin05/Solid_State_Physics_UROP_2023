@@ -1,0 +1,12 @@
+Loading matlab/R2020b
+  Loading requirement: fix_unwritable_tmp fix_cxa_thread_atexit_impl
+cp: cannot stat '/rds/general/user/zl3321/home/mumax/P760_L550_W160_TT30_TB20_S30/POWERMAPS/TESTS/mx3/TRI_ISLAND_P.mx3': No such file or directory
+//Using cached kernel: /tmp/mumax3kernel_[118 36 8]_[0 0 0]_[5e-09 5e-09 1e-08]_6_
+/var/spool/PBS/mom_priv/jobs/8112133.pbs.SC: line 39: cd: /var/tmp/pbs.8112133.pbs/TRI_ISLAND_P.out/: No such file or directory
+cp: cannot stat '/rds/general/user/zl3321/home/mumax/matlab/SW_T_ISLAND.m': No such file or directory
+cp: cannot stat '/rds/general/user/zl3321/home/mumax/matlab/phasemap.mat': No such file or directory
+cp: cannot stat '/rds/general/user/zl3321/home/mumax/matlab/purplegreen.mat': No such file or directory
+cp: cannot stat '/rds/general/user/zl3321/home/mumax/matlab/redblue.mat': No such file or directory
+/var/spool/PBS/mom_priv/jobs/8112133.pbs.SC: line 44: SW_T_ISLAND.m: No such file or directory
+rm: cannot remove '*.ovf': No such file or directory
+cp: cannot stat '/var/tmp/pbs.8112133.pbs/TRI_ISLAND_P.out': No such file or directory
